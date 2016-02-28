@@ -18,6 +18,20 @@ import com.rabbitmq.client.ConnectionFactory;
 public class Client {
     private final static String QUEUE_NAME = "hello";
     private static Logger logger = Logger.getLogger(Client.class);
+    private ConnectionFactory factory;
+    Connection connection;
+    Channel channel;
+    
+    
+    public Client() {
+        super();
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("rabbithost");
+//        
+//        Connection connection = factory.newConnection();
+//        Channel channel = connection.createChannel();
+    }
+
 
     public static void main(String[] args) throws Exception {
         ConnectionFactory factory = new ConnectionFactory();
@@ -27,7 +41,12 @@ public class Client {
         Channel channel = connection.createChannel();
         channel.queueDeclare(QUEUE_NAME, false, false, false, null);
         String message = "Hello World";
-        channel.basicPublish("fanoutExchange", "", null, message.getBytes());
+        String fanoutMessage = "Fanout";
+        while(true){
+        channel.basicPublish("directExchange", "1fuck", null, message.getBytes());
+        channel.basicPublish("fanoutExchange", "", null, fanoutMessage.getBytes());
+        Thread.sleep(5000);
+        }
     }
     
 }

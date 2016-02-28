@@ -1,5 +1,8 @@
 
 package helios.transaction;
+
+import java.util.List;
+
 /**  
  * @Project: helios
  * @Title: PreparingTransaction.java
@@ -10,5 +13,5 @@ package helios.transaction;
  * @version V1.0  
  */
 public class PreparingTransaction extends Transaction {
-
+    
 }

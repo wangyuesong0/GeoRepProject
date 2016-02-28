@@ -2,6 +2,7 @@
 package helios.transaction;
 
 import java.util.HashMap;
+import java.util.List;
 
 /**  
  * @Project: helios
@@ -16,5 +17,7 @@ public abstract class Transaction {
     protected HashMap<String,String> writeSet;
     protected HashMap<String,String> readSet;
     protected long timestamp;
+  //Calculated kts to other datacenters
+    protected List<Long> kts;
     
 }
