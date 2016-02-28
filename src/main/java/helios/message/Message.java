@@ -1,5 +1,8 @@
 
 package helios.message;
+
+import java.util.UUID;
+
 /**  
  * @Project: helios
  * @Title: Message.java
@@ -10,5 +13,15 @@ package helios.message;
  * @version V1.0  
  */
 public class Message {
-
+    public UUID uid;
+    public MessageType type;
+    public String routingKey;
+    
+    public Message(MessageType type, String routingKey) {
+        super();
+        this.uid = UUID.randomUUID();
+        this.type = type;
+        this.routingKey = routingKey;
+    }
+    
 }

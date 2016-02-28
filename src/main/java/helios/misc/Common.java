@@ -1,5 +1,7 @@
 package helios.misc;
 
+import helios.message.MessageWrapper;
+
 import com.google.gson.Gson;
 
 /**
@@ -15,7 +17,8 @@ public class Common {
     // For log propagation
     public final static String FANOUT_EXCHANGE_NAME = "fanoutExchange";
     // For client send request to data center, with routing key
-    public final static String DIRECT_EXCHANGE_NAME = "directExchange";
+    public final static String CLIENT_REQUEST_DIRECT_EXCHANGE_NAME = "clientRequestDirectExchange";
+    public final static String DC_RESPONSE_DIRECT_EXCHANGE_NAME = "dcResponseDirectExchange";
     public final static String MQ_HOST_NAME = "rabbithost";
 
     /**

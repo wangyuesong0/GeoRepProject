@@ -1,11 +1,9 @@
 package helios.datacenter;
 
-import helios.client.Client;
 import helios.misc.Common;
 
 import java.io.IOException;
 import java.util.PriorityQueue;
-import java.util.concurrent.TimeoutException;
 
 import org.apache.log4j.Logger;
 
@@ -26,7 +24,7 @@ import com.rabbitmq.client.Envelope;
  * @date Feb 27, 2016 10:46:04 PM
  * @version V1.0
  */
-public class DataCenter {
+public class DataCenter implements Runnable{
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
@@ -63,7 +61,6 @@ public class DataCenter {
         EPTPool = new PriorityQueue<Log>();
         bindToFanoutExchange();
         bindToClientExchange();
-        
     }
     /**
      * Bind datacenter to a direct exchange to receive client message.
@@ -73,9 +70,9 @@ public class DataCenter {
      * @throws Exception 
      */
     public void bindToClientExchange() throws Exception{
-        channel.exchangeDeclare(Common.DIRECT_EXCHANGE_NAME, "direct");
+        channel.exchangeDeclare(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, "direct");
         channel.queueDeclare(directQueueName, false, false, false, null);
-        channel.queueBind(directQueueName, Common.DIRECT_EXCHANGE_NAME, this.dataCenterName);
+        channel.queueBind(directQueueName, Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, this.dataCenterName);
         Consumer consumer = new DefaultConsumer(channel) {
             @Override
             public void handleDelivery(String consumerTag,
@@ -131,5 +128,12 @@ public class DataCenter {
            d.bindToFanoutExchange();
            d.bindToClientExchange();
        }
+    }
+    /**
+     * Datacenter run method, wait for incoming client request
+     */
+    public void run() {
+        logger.info("Data Center: " + this.dataCenterName + " is Running");
+        
     }
 }

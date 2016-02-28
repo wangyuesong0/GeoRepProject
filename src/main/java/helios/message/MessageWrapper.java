@@ -1,6 +1,7 @@
-package helios.misc;
+package helios.message;
 
-import helios.message.Message;
+
+import helios.misc.Common;
 
 //import messagefutures.message.*;
 import com.google.gson.*;
