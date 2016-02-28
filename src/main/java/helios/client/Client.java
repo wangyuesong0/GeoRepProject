@@ -1,4 +1,4 @@
-package helios;
+package helios.client;
 
 import org.apache.log4j.Logger;
 
@@ -29,4 +29,5 @@ public class Client {
         String message = "Hello World";
         channel.basicPublish("fanoutExchange", "", null, message.getBytes());
     }
+    
 }

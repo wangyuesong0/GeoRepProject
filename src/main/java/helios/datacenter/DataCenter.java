@@ -1,6 +1,9 @@
-package helios;
+package helios.datacenter;
+
+import helios.misc.Common;
 
 import java.io.IOException;
+import java.util.PriorityQueue;
 import java.util.concurrent.TimeoutException;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
@@ -26,15 +29,23 @@ public class DataCenter {
     private Channel channel;
     private String dataCenterName;
     private String queueName;
-
-    public DataCenter(String dataCenterName) throws Exception {
+    private int totalNumOfDataCenters;
+    private long[][] rDict;
+    private int[] RTTLatencies;
+    private int[] commitOffsets;
+    private PriorityQueue<Log> PTPool;
+    private PriorityQueue<Log> EPTPool;
+    
+    public DataCenter(String dataCenterName, int totalNumOfDataCenters) throws Exception {
         super();
         this.dataCenterName = dataCenterName;
-        queueName = dataCenterName + ".queue";
+        this.totalNumOfDataCenters = totalNumOfDataCenters;
+        queueName = this.dataCenterName + ".queue";
         factory = new ConnectionFactory();
         factory.setHost(Common.MQ_HOST_NAME);
         connection = factory.newConnection();
         channel = connection.createChannel();
+        rDict = new long[totalNumOfDataCenters][totalNumOfDataCenters];
         bindToFanoutExchange();
 
     }
@@ -57,6 +68,9 @@ public class DataCenter {
     }
     
     
+    private long getCurrentTimestamp(){
+       return System.currentTimeMillis() / 1000L;
+    }
 
     @Override
     protected void finalize() throws Throwable {
@@ -68,7 +82,7 @@ public class DataCenter {
 
     public static void main(String[] args) throws Exception {
        for(int i = 0; i < 5; i ++){
-           new DataCenter(i+"fuck").bindToFanoutExchange();
+           new DataCenter(i+"fuck",5).bindToFanoutExchange();
        }
     }
 }

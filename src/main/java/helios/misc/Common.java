@@ -1,4 +1,4 @@
-package helios;
+package helios.misc;
 
 /**
  * @Project: helios
