@@ -13,9 +13,9 @@ import java.util.UUID;
  * @version V1.0  
  */
 public class Message {
-    public UUID uid;
-    public MessageType type;
-    public String routingKey;
+    private UUID uid;
+    private MessageType type;
+    private String routingKey;
     
     public Message(MessageType type, String routingKey) {
         super();
@@ -23,5 +23,32 @@ public class Message {
         this.type = type;
         this.routingKey = routingKey;
     }
+
+    public UUID getUid() {
+        return uid;
+    }
+
+    public void setUid(UUID uid) {
+        this.uid = uid;
+    }
+
+    public MessageType getType() {
+        return type;
+    }
+
+    public void setType(MessageType type) {
+        this.type = type;
+    }
+
+    public String getRoutingKey() {
+        return routingKey;
+    }
+
+    public void setRoutingKey(String routingKey) {
+        this.routingKey = routingKey;
+    }
+    
+    
+    
     
 }

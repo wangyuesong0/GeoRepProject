@@ -1,5 +1,8 @@
 package helios.datacenter;
 
+import helios.message.ClientRequestMessage;
+import helios.message.MessageType;
+import helios.message.MessageWrapper;
 import helios.misc.Common;
 
 import java.io.IOException;
@@ -12,8 +15,11 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Consumer;
+import com.rabbitmq.client.ConsumerCancelledException;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.QueueingConsumer;
+import com.rabbitmq.client.ShutdownSignalException;
 
 /**
  * @Project: helios
@@ -24,15 +30,18 @@ import com.rabbitmq.client.Envelope;
  * @date Feb 27, 2016 10:46:04 PM
  * @version V1.0
  */
-public class DataCenter implements Runnable{
+public class DataCenter implements Runnable {
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
     private String dataCenterName;
-    //Log queue
+    // Log queue
     private String fanoutQueueName;
-    //Client message queue
+    // Client message queue
     private String directQueueName;
+    // Consumer for client message and log message
+    private QueueingConsumer consumer;
+
     private int totalNumOfDataCenters;
     private long[][] rDict;
     private int[] RTTLatencies;
@@ -40,8 +49,10 @@ public class DataCenter implements Runnable{
     private PriorityQueue<Log> PTPool;
     private PriorityQueue<Log> EPTPool;
     private static Logger logger = Logger.getLogger(DataCenter.class);
+
     /**
      * Initialization
+     * 
      * @param dataCenterName
      * @param totalNumOfDataCenters
      * @throws Exception
@@ -59,58 +70,50 @@ public class DataCenter implements Runnable{
         rDict = new long[totalNumOfDataCenters][totalNumOfDataCenters];
         PTPool = new PriorityQueue<Log>();
         EPTPool = new PriorityQueue<Log>();
-        bindToFanoutExchange();
-        bindToClientExchange();
     }
+
     /**
      * Bind datacenter to a direct exchange to receive client message.
      * Queue name: this.dataCenterName + ".direct.queue", Routing Key: this.dataCenterName
      * Description: TODO
      * void
-     * @throws Exception 
+     * 
+     * @throws Exception
      */
-    public void bindToClientExchange() throws Exception{
+    public void bindToClientExchange() throws Exception {
         channel.exchangeDeclare(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, "direct");
         channel.queueDeclare(directQueueName, false, false, false, null);
         channel.queueBind(directQueueName, Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, this.dataCenterName);
-        Consumer consumer = new DefaultConsumer(channel) {
-            @Override
-            public void handleDelivery(String consumerTag,
-                    Envelope envelope, BasicProperties properties, byte[] body)
-                    throws IOException {
-                String message = new String(body, "UTF-8");
-                logger.info("Client Message:" + message);
-            }
-        };
-        channel.basicConsume(directQueueName, consumer);
+        if (consumer == null) {
+            consumer = new QueueingConsumer(channel);
+        }
+        channel.basicConsume(directQueueName, true, consumer);
+
     }
 
     /**
      * Bind datacenter to a fanout exchange for log propagation. Queue name: this.dataCenterName + ".fanout.queue"
      * Description: TODO
+     * 
      * @throws IOException
-     * void
+     *             void
+     * @throws InterruptedException
+     * @throws ConsumerCancelledException
+     * @throws ShutdownSignalException
      */
-    public void bindToFanoutExchange() throws IOException {
+    public void bindToFanoutExchange() throws IOException, ShutdownSignalException, ConsumerCancelledException,
+            InterruptedException {
         channel.exchangeDeclare(Common.FANOUT_EXCHANGE_NAME, "fanout");
         channel.queueDeclare(fanoutQueueName, false, false, false, null);
         channel.queueBind(fanoutQueueName, Common.FANOUT_EXCHANGE_NAME, "Whatever");
-       
-        Consumer consumer = new DefaultConsumer(channel) {
-            @Override
-            public void handleDelivery(String consumerTag,
-                    Envelope envelope, BasicProperties properties, byte[] body)
-                    throws IOException {
-                String message = new String(body, "UTF-8");
-                logger.info("Log Propagation:" + message);
-            }
-        };
-        channel.basicConsume(fanoutQueueName, consumer);
+        if (consumer == null) {
+            consumer = new QueueingConsumer(channel);
+        }
+        channel.basicConsume(fanoutQueueName, true, consumer);
     }
-    
-    
-    private long getCurrentTimestamp(){
-       return System.currentTimeMillis() / 1000L;
+
+    private long getCurrentTimestamp() {
+        return System.currentTimeMillis() / 1000L;
     }
 
     @Override
@@ -121,19 +124,45 @@ public class DataCenter implements Runnable{
         this.connection.close();
     }
 
-    public static void main(String[] args) throws Exception {
-       
-       for(int i = 0; i < 5; i ++){
-           DataCenter d = new DataCenter(i+"fuck",5);
-           d.bindToFanoutExchange();
-           d.bindToClientExchange();
-       }
-    }
     /**
      * Datacenter run method, wait for incoming client request
      */
     public void run() {
+        MessageWrapper wrapper = null;
+        QueueingConsumer.Delivery delivery;
         logger.info("Data Center: " + this.dataCenterName + " is Running");
-        
+        try {
+            this.bindToClientExchange();
+//            this.bindToFanoutExchange(); 
+        } catch (Exception e) {
+            logger.error("Binding to exchange failed");
+            System.exit(-1);
+        }
+        try {
+            while (true) {
+                delivery = consumer.nextDelivery();
+                if (delivery != null) {
+                    String msg = new String(delivery.getBody());
+                    wrapper = MessageWrapper.getDeSerializedMessage(msg);
+                }
+                if (wrapper != null) {
+                    if (wrapper.getmessageclass() == ClientRequestMessage.class) {
+                        ClientRequestMessage request = (ClientRequestMessage) wrapper.getDeSerializedInnerMessage();
+                        // System.out.println("BEGIN REQUEST");
+                        logger.info("Client message received");
+                        if (request.getType().equals(MessageType.BEGIN)) {
+                            logger.info("Begin message");
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        DataCenter dc = new DataCenter("test", 1);
+        (new Thread(dc)).start();
     }
 }

@@ -61,10 +61,45 @@ public class ClientRequestMessage extends Message {
      * Commit/Abort Request
      * @param type
      * @param routingKey
+     * @param txnNum
      */
     public ClientRequestMessage(MessageType type, String routingKey, Integer txnNum) {
         super(type, routingKey);
         this.txnNum = txnNum;
     }
+
+    public String getWriteKey() {
+        return writeKey;
+    }
+
+    public void setWriteKey(String writeKey) {
+        this.writeKey = writeKey;
+    }
+
+    public String getReadKey() {
+        return readKey;
+    }
+
+    public void setReadKey(String readKey) {
+        this.readKey = readKey;
+    }
+
+    public String getWriteValue() {
+        return writeValue;
+    }
+
+    public void setWriteValue(String writeValue) {
+        this.writeValue = writeValue;
+    }
+
+    public Integer getTxnNum() {
+        return txnNum;
+    }
+
+    public void setTxnNum(Integer txnNum) {
+        this.txnNum = txnNum;
+    }
+    
+    
     
 }

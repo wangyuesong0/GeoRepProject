@@ -1,5 +1,12 @@
 package helios.client;
 
+import helios.message.ClientRequestMessage;
+import helios.message.ClientRequestMessageFactory;
+import helios.message.Message;
+import helios.message.MessageType;
+import helios.message.MessageWrapper;
+import helios.misc.Common;
+
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
@@ -31,43 +38,37 @@ public class Client implements Runnable {
         factory.setHost("rabbithost");
         connection = factory.newConnection();
         channel = connection.createChannel();
-        //
-        // Connection connection = factory.newConnection();
-        // Channel channel = connection.createChannel();
     }
 
     /**
-     * Send begin message to a specific Datacenter by routingKey
+     * Send message to DC, message contains a routing key
+     * Description: TODO
+     * 
+     * @param message
+     * @throws IOException
+     *             void
+     */
+    public void sendMessageToDataCenter(Message message) throws IOException {
+        channel.basicPublish(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, message.getRoutingKey(), null,
+                new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
+    }
+
+    /**
+     * Send begin message
      * Description: TODO
      * 
      * @param routingKey
      *            void
+     * @throws IOException
      */
-    public void sendBeginMessage(String routingKey) {
-
+    public void sendBeginMessage(String routingKey) throws IOException {
+        logger.info("Client send begin message to datacenter:" + routingKey);
+        sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(routingKey));
     }
 
-    // public void sendBeginMessage(String dest) throws IOException
-    // {
-    // ClientMessage msg = new ClientMessage(EXCHANGE_NAME, MessageType.BEGIN);
-    // this.AddLogEntry("Sent Begin Request " + msg ,Level.INFO);
-    // System.out.println("Sent Begin Request " + msg);
-    // MessageWrapper msgwrap = new MessageWrapper(Common.Serialize(msg), msg.getClass());
-    // channel.basicPublish("",dest, null, msgwrap.getSerializedMessage().getBytes());
-    // }
-
     public static void main(String[] args) throws Exception {
-
-        // factory.setPort(15672);
-//        Channel channel = connection.createChannel();
-//        channel.queueDeclare(QUEUE_NAME, false, false, false, null);
-//        String message = "Hello World";
-//        String fanoutMessage = "Fanout";
-//        while (true) {
-//            channel.basicPublish("directExchange", "1fuck", null, message.getBytes());
-//            channel.basicPublish("fanoutExchange", "", null, fanoutMessage.getBytes());
-//            Thread.sleep(5000);
-//        }
+        Client c = new Client();
+        c.sendBeginMessage("test");
     }
 
     /**
