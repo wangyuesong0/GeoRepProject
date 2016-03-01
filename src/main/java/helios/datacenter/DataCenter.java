@@ -1,6 +1,8 @@
 package helios.datacenter;
 
+import helios.log.Log;
 import helios.message.ClientRequestMessage;
+import helios.message.LogPropMessage;
 import helios.message.MessageType;
 import helios.message.MessageWrapper;
 import helios.misc.Common;
@@ -34,6 +36,7 @@ public class DataCenter implements Runnable {
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
+    // UNIQUE routing key
     private String dataCenterName;
     // Log queue
     private String fanoutQueueName;
@@ -48,6 +51,9 @@ public class DataCenter implements Runnable {
     private int[] commitOffsets;
     private PriorityQueue<Log> PTPool;
     private PriorityQueue<Log> EPTPool;
+    
+    private boolean isAutoLogPropagation = true;
+    
     private static Logger logger = Logger.getLogger(DataCenter.class);
 
     /**
@@ -125,6 +131,19 @@ public class DataCenter implements Runnable {
     }
 
     /**
+     * 
+     * Description: Send log propagation message
+     * 
+     * @param message
+     * @throws IOException
+     *             void
+     */
+    public void sendLogPropagationMessage(LogPropMessage message) throws IOException {
+        channel.basicPublish(Common.FANOUT_EXCHANGE_NAME, "Whatever", null,
+                new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
+    }
+
+    /**
      * Datacenter run method, wait for incoming client request
      */
     public void run() {
@@ -133,11 +152,15 @@ public class DataCenter implements Runnable {
         logger.info("Data Center: " + this.dataCenterName + " is Running");
         try {
             this.bindToClientExchange();
-//            this.bindToFanoutExchange(); 
+            this.bindToFanoutExchange();
         } catch (Exception e) {
             logger.error("Binding to exchange failed");
             System.exit(-1);
         }
+        //Start Log propagation
+        new Thread(new LogPropagationThread(this)).start();
+        
+        //Receive Log
         try {
             while (true) {
                 delivery = consumer.nextDelivery();
@@ -150,9 +173,30 @@ public class DataCenter implements Runnable {
                         ClientRequestMessage request = (ClientRequestMessage) wrapper.getDeSerializedInnerMessage();
                         // System.out.println("BEGIN REQUEST");
                         logger.info("Client message received");
-                        if (request.getType().equals(MessageType.BEGIN)) {
-                            logger.info("Begin message");
+                        MessageType t = request.getType();
+                        switch (t) {
+                        case BEGIN:
+                            logger.info("BEGIN MESSAGE");
+                            break;
+                        case WRITE:
+                            logger.info("WRITE MESSAGE");
+                            logger.info("Write key" + request.getWriteKey() + ", Write value:"
+                                    + request.getWriteValue());
+                            break;
+                        case READ:
+                            logger.info("READ MESSAGE");
+                            break;
+                        case COMMIT:
+                            logger.info("COMMIT MESSAGE");
+                            break;
+                        case ABORT:
+                            logger.info("ABORT MESSAGE");
+                            break;
                         }
+                    }
+                    else if (wrapper.getmessageclass() == LogPropMessage.class) {
+                        LogPropMessage logPropMessage = (LogPropMessage)wrapper.getDeSerializedInnerMessage();
+                        logger.info("Log prop from:" + logPropMessage.getDataCenterName());
                     }
                 }
             }
@@ -161,8 +205,41 @@ public class DataCenter implements Runnable {
         }
     }
 
+    private static class LogPropagationThread implements Runnable {
+        private DataCenter dc;
+        
+        
+        public LogPropagationThread(DataCenter dc) {
+            super();
+            this.dc = dc;
+        }
+
+
+        public void run() {
+            // TODO Auto-generated method stub
+            while(true){
+                if(dc.isAutoLogPropagation){
+                    try {
+                        dc.sendLogPropagationMessage(new LogPropMessage(dc.dataCenterName, "Propagation"));
+                        Thread.sleep(1000);
+                    } catch (IOException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    } catch (InterruptedException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                    
+                }
+            }
+        }
+        
+    }
+
     public static void main(String[] args) throws Exception {
-        DataCenter dc = new DataCenter("test", 1);
-        (new Thread(dc)).start();
+        DataCenter dc1 = new DataCenter("test1", 2);
+        DataCenter dc2 = new DataCenter("test2", 2);
+        (new Thread(dc1)).start();
+        (new Thread(dc2)).start();
     }
 }

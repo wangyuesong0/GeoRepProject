@@ -10,24 +10,25 @@ package helios.message;
  * @version V1.0
  */
 public class ClientRequestMessageFactory {
-    public static Message createBeginMessage(String routingKey) {
-        return new ClientRequestMessage(MessageType.BEGIN, routingKey);
+    public static ClientRequestMessage createBeginMessage(String clientName, String routingKey) {
+        return new ClientRequestMessage(MessageType.BEGIN, clientName, routingKey);
     }
 
-    public static Message createWriteMessage(Integer txnNum, String routingKey, String writeKey, String writeValue) {
-        return new ClientRequestMessage(MessageType.WRITE, routingKey, writeKey, writeValue, txnNum);
+    public static ClientRequestMessage createWriteMessage(String clientName, Integer txnNum, String routingKey, String writeKey,
+            String writeValue) {
+        return new ClientRequestMessage(MessageType.WRITE, clientName, routingKey, writeKey, writeValue, txnNum);
     }
 
-    public static Message createReadMessage(Integer txnNum, String routingKey, String readKey) {
-        return new ClientRequestMessage(MessageType.READ, routingKey, readKey, txnNum);
+    public static ClientRequestMessage createReadMessage(String clientName, Integer txnNum, String routingKey, String readKey) {
+        return new ClientRequestMessage(MessageType.READ, clientName, routingKey, readKey, txnNum);
     }
 
-    public static Message createCommitMessage(Integer txnNum, String routingKey) {
-        return new ClientRequestMessage(MessageType.COMMIT, routingKey, txnNum);
+    public static ClientRequestMessage createCommitMessage(String clientName, Integer txnNum, String routingKey) {
+        return new ClientRequestMessage(MessageType.COMMIT, clientName, routingKey, txnNum);
     }
 
-    public static Message createAbortMessage(Integer txnNum, String routingKey) {
-        return new ClientRequestMessage(MessageType.ABORT, routingKey, txnNum);
+    public static ClientRequestMessage createAbortMessage(String clientName, Integer txnNum, String routingKey) {
+        return new ClientRequestMessage(MessageType.ABORT, clientName, routingKey, txnNum);
     }
 
 }

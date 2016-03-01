@@ -14,14 +14,11 @@ import java.util.UUID;
  */
 public class Message {
     private UUID uid;
-    private MessageType type;
-    private String routingKey;
+  
     
-    public Message(MessageType type, String routingKey) {
+    public Message() {
         super();
         this.uid = UUID.randomUUID();
-        this.type = type;
-        this.routingKey = routingKey;
     }
 
     public UUID getUid() {
@@ -32,22 +29,6 @@ public class Message {
         this.uid = uid;
     }
 
-    public MessageType getType() {
-        return type;
-    }
-
-    public void setType(MessageType type) {
-        this.type = type;
-    }
-
-    public String getRoutingKey() {
-        return routingKey;
-    }
-
-    public void setRoutingKey(String routingKey) {
-        this.routingKey = routingKey;
-    }
-    
     
     
     

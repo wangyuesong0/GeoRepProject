@@ -30,6 +30,8 @@ public class Client implements Runnable {
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
+    // UNIQUE routing key
+    private String clientName;
 
     public Client() throws IOException, TimeoutException {
         super();
@@ -48,14 +50,13 @@ public class Client implements Runnable {
      * @throws IOException
      *             void
      */
-    public void sendMessageToDataCenter(Message message) throws IOException {
+    public void sendMessageToDataCenter(ClientRequestMessage message) throws IOException {
         channel.basicPublish(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, message.getRoutingKey(), null,
                 new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
     }
 
     /**
-     * Send begin message
-     * Description: TODO
+     * Description: Send begin message
      * 
      * @param routingKey
      *            void
@@ -63,12 +64,73 @@ public class Client implements Runnable {
      */
     public void sendBeginMessage(String routingKey) throws IOException {
         logger.info("Client send begin message to datacenter:" + routingKey);
-        sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(routingKey));
+        sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(this.clientName, routingKey));
+    }
+
+    /**
+     * 
+     * Description: Send read message
+     * 
+     * @param routingKey
+     * @param txnNum
+     * @param readKey
+     * @throws IOException
+     *             void
+     */
+    public void sendReadMessage(String routingKey, int txnNum, String readKey) throws IOException {
+        logger.info("Client send read message to datacenter:" + routingKey);
+        sendMessageToDataCenter(ClientRequestMessageFactory.createReadMessage(this.clientName, txnNum, routingKey,
+                readKey));
+    }
+
+    /**
+     * Description: Send write message
+     * 
+     * @param routingKey
+     * @param txnNum
+     * @param writeKey
+     * @param writeValue
+     * @throws IOException
+     *             void
+     */
+    public void sendWriteMessage(String routingKey, int txnNum, String writeKey, String writeValue) throws IOException {
+        logger.info("Client send write message to datacenter:" + routingKey);
+        sendMessageToDataCenter(ClientRequestMessageFactory
+                .createWriteMessage(this.clientName, txnNum, routingKey, writeKey, writeValue));
+    }
+
+    /**
+     * 
+     * Description: Send commit message
+     * 
+     * @param routingKey
+     * @param txnNum
+     * @throws IOException
+     *             void
+     */
+    public void sendCommitMessage(String routingKey, int txnNum) throws IOException {
+        logger.info("Client send commit message to datacenter:" + routingKey);
+        sendMessageToDataCenter(ClientRequestMessageFactory.createCommitMessage(this.clientName, txnNum, routingKey));
+    }
+
+    /**
+     * 
+     * Description: Send abort message
+     * 
+     * @param routingKey
+     * @param txnNum
+     * @throws IOException
+     *             void
+     */
+    public void sendAbortMessage(String routingKey, int txnNum) throws IOException {
+        logger.info("Client send abort message to datacenter:" + routingKey);
+        sendMessageToDataCenter(ClientRequestMessageFactory.createAbortMessage(this.clientName, txnNum, routingKey));
     }
 
     public static void main(String[] args) throws Exception {
         Client c = new Client();
         c.sendBeginMessage("test");
+        c.sendWriteMessage("test", 1, "Hello", "Hello");
     }
 
     /**

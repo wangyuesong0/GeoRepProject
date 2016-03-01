@@ -15,8 +15,8 @@ public class CenterResponseMessage extends Message{
      * @param type
      * @param routingKey
      */
-    public CenterResponseMessage(MessageType type, String routingKey) {
-        super(type, routingKey);
+    public CenterResponseMessage() {
+        super();
         // TODO Auto-generated constructor stub
     }
 
