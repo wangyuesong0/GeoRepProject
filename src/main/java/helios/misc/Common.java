@@ -15,18 +15,26 @@ import com.google.gson.Gson;
  */
 public class Common {
     // For log propagation
-    public final static String FANOUT_EXCHANGE_NAME = "fanoutExchange";
+    public final static String LOG_DIRECT_EXCHANGE_NAME = "logPropDirectExchange";
     // For client send request to data center, with routing key
     public final static String CLIENT_REQUEST_DIRECT_EXCHANGE_NAME = "clientRequestDirectExchange";
-    public final static String DC_RESPONSE_DIRECT_EXCHANGE_NAME = "dcResponseDirectExchange";
+//    public final static String DC_RESPONSE_DIRECT_EXCHANGE_NAME = "dcResponseDirectExchange";
     public final static String MQ_HOST_NAME = "rabbithost";
+
+    public static String getClientMessageDirectQueueName(String dataCenterName) {
+        return dataCenterName + "client.direct.queue";
+    }
+    public static String getLogPropgationDirectQueueName(String dataCenterName) {
+        return dataCenterName + "log.direct.queue";
+    }
 
     /**
      * Use json to serialize POJO message
      * Description: TODO
+     * 
      * @param message
      * @return
-     * String
+     *         String
      */
     public static <T> String Serialize(T message)
     {

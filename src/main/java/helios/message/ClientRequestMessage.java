@@ -14,7 +14,7 @@ public class ClientRequestMessage extends Message {
      * @param type
      * @param routingKey
      */
-    private MessageType type;
+    private ClientMessageType type;
     private String clientName;
     private String writeKey;
     private String readKey;
@@ -31,7 +31,7 @@ public class ClientRequestMessage extends Message {
      * @param writeValue
      * @param txnNum
      */
-    public ClientRequestMessage(MessageType type, String clientName, String routingKey, String writeKey,
+    public ClientRequestMessage(ClientMessageType type, String clientName, String routingKey, String writeKey,
             String writeValue, Integer txnNum) {
         super();
         this.type = type;
@@ -50,7 +50,7 @@ public class ClientRequestMessage extends Message {
      * @param readKey
      * @param txnNum
      */
-    public ClientRequestMessage(MessageType type, String clientName,String routingKey, String readKey, Integer txnNum) {
+    public ClientRequestMessage(ClientMessageType type, String clientName,String routingKey, String readKey, Integer txnNum) {
         super();
         this.type = type;
         this.routingKey = routingKey;
@@ -65,7 +65,7 @@ public class ClientRequestMessage extends Message {
      * @param clientName
      * @param routingKey
      */
-    public ClientRequestMessage(MessageType type, String clientName, String routingKey) {
+    public ClientRequestMessage(ClientMessageType type, String clientName, String routingKey) {
         super();
         this.type = type;
         this.routingKey = routingKey;
@@ -79,7 +79,7 @@ public class ClientRequestMessage extends Message {
      * @param routingKey
      * @param txnNum
      */
-    public ClientRequestMessage(MessageType type,String clientName, String routingKey, Integer txnNum) {
+    public ClientRequestMessage(ClientMessageType type,String clientName, String routingKey, Integer txnNum) {
         super();
         this.type = type;
         this.routingKey = routingKey;
@@ -127,11 +127,11 @@ public class ClientRequestMessage extends Message {
         this.clientName = clientName;
     }
 
-    public MessageType getType() {
+    public ClientMessageType getType() {
         return type;
     }
 
-    public void setType(MessageType type) {
+    public void setType(ClientMessageType type) {
         this.type = type;
     }
 

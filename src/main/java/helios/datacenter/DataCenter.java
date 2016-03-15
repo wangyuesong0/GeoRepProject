@@ -1,9 +1,9 @@
 package helios.datacenter;
 
 import helios.log.Log;
+import helios.message.ClientMessageType;
 import helios.message.ClientRequestMessage;
 import helios.message.LogPropMessage;
-import helios.message.MessageType;
 import helios.message.MessageWrapper;
 import helios.misc.Common;
 
@@ -12,14 +12,10 @@ import java.util.PriorityQueue;
 
 import org.apache.log4j.Logger;
 
-import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
-import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.ConsumerCancelledException;
-import com.rabbitmq.client.DefaultConsumer;
-import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.ShutdownSignalException;
 
@@ -36,24 +32,41 @@ public class DataCenter implements Runnable {
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
+
     // UNIQUE routing key
     private String dataCenterName;
+
+    // Index in dataCenterList
+    private int dataCenterIndex;
+
     // Log queue
-    private String fanoutQueueName;
+    // private String fanoutQueueName;
     // Client message queue
-    private String directQueueName;
+    private String clientMessageDirectQueueName;
+
+    private String logPropagationDirectQueueName;
+
+    private DataCenter[] dataCenterList;
+
+    // Use location to calculated the simulated RTT between datacenters;
+    private int location;
     // Consumer for client message and log message
     private QueueingConsumer consumer;
 
     private int totalNumOfDataCenters;
-    private long[][] rDict;
+    // Now I just understand one row's function... Just use it when periodically
+    private long[] rDict;
+
+    // To simulate log propagation latencies
     private int[] RTTLatencies;
+    // Each center is assigned a commitOffset to other data center, used to decide whether to commit or abort
     private int[] commitOffsets;
+
     private PriorityQueue<Log> PTPool;
     private PriorityQueue<Log> EPTPool;
-    
+
     private boolean isAutoLogPropagation = true;
-    
+
     private static Logger logger = Logger.getLogger(DataCenter.class);
 
     /**
@@ -63,19 +76,60 @@ public class DataCenter implements Runnable {
      * @param totalNumOfDataCenters
      * @throws Exception
      */
-    public DataCenter(String dataCenterName, int totalNumOfDataCenters) throws Exception {
+    public DataCenter(String dataCenterName, int dataCenterIndex, int location, DataCenter[] dataCenterList)
+            throws Exception {
         super();
+        this.dataCenterList = dataCenterList;
+        this.dataCenterIndex = dataCenterIndex;
+        this.location = location;
         this.dataCenterName = dataCenterName;
-        this.totalNumOfDataCenters = totalNumOfDataCenters;
-        fanoutQueueName = this.dataCenterName + ".fanout.queue";
-        directQueueName = this.dataCenterName + ".direct.queue";
+        this.totalNumOfDataCenters = dataCenterList.length;
+        // fanoutQueueName = this.dataCenterName + ".fanout.queue";
+        clientMessageDirectQueueName = Common.getClientMessageDirectQueueName(dataCenterName);
+        logPropagationDirectQueueName = Common.getLogPropgationDirectQueueName(dataCenterName);
+
         factory = new ConnectionFactory();
         factory.setHost(Common.MQ_HOST_NAME);
         connection = factory.newConnection();
         channel = connection.createChannel();
-        rDict = new long[totalNumOfDataCenters][totalNumOfDataCenters];
+        rDict = new long[totalNumOfDataCenters];
         PTPool = new PriorityQueue<Log>();
         EPTPool = new PriorityQueue<Log>();
+    }
+
+    // Generate RTT list based on location setting of data centers
+    public void generateRTTList() {
+        for (int i = 0; i < dataCenterList.length; i++) {
+            this.RTTLatencies[i] = Math.abs(this.location - dataCenterList[i].location);
+        }
+    }
+
+    // Temporarily use 0 as all commit offsets
+    public void generateCommitOffsets() {
+        for (int i = 0; i < dataCenterList.length; i++) {
+            this.commitOffsets[i] = 0;
+        }
+    }
+
+    /**
+     * Bind datacenter to a direct exchange to receive log propgation message.
+     * Queue name: this.dataCenterName + "log.direct.queue";, Routing Key: this.dataCenterName
+     * Description: TODO
+     * void
+     * 
+     * @throws Exception
+     */
+    public void bindToLogExchange() throws Exception {
+        channel.exchangeDeclare(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, "direct");
+        channel.queueDeclare(this.clientMessageDirectQueueName, false, false, false, null);
+        // 使用logPropagationDirectQueueName这个Queue绑定到Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME这个exchange上，routing
+        // key为dataCenterName
+        channel.queueBind(this.logPropagationDirectQueueName, Common.LOG_DIRECT_EXCHANGE_NAME,
+                this.dataCenterName);
+        if (consumer == null) {
+            consumer = new QueueingConsumer(channel);
+        }
+        channel.basicConsume(clientMessageDirectQueueName, true, consumer);
     }
 
     /**
@@ -88,34 +142,30 @@ public class DataCenter implements Runnable {
      */
     public void bindToClientExchange() throws Exception {
         channel.exchangeDeclare(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, "direct");
-        channel.queueDeclare(directQueueName, false, false, false, null);
-        channel.queueBind(directQueueName, Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, this.dataCenterName);
+        channel.queueDeclare(this.clientMessageDirectQueueName, false, false, false, null);
+
+        // 使用clientMessageDirectQueueName这个Queue绑定到Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME这个exchange上，routing
+        // key为dataCenterName
+        channel.queueBind(this.clientMessageDirectQueueName, Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME,
+                this.dataCenterName);
         if (consumer == null) {
             consumer = new QueueingConsumer(channel);
         }
-        channel.basicConsume(directQueueName, true, consumer);
+        channel.basicConsume(clientMessageDirectQueueName, true, consumer);
 
     }
 
     /**
-     * Bind datacenter to a fanout exchange for log propagation. Queue name: this.dataCenterName + ".fanout.queue"
-     * Description: TODO
      * 
+     * Description: Send log propagation message
+     * 
+     * @param message
      * @throws IOException
      *             void
-     * @throws InterruptedException
-     * @throws ConsumerCancelledException
-     * @throws ShutdownSignalException
      */
-    public void bindToFanoutExchange() throws IOException, ShutdownSignalException, ConsumerCancelledException,
-            InterruptedException {
-        channel.exchangeDeclare(Common.FANOUT_EXCHANGE_NAME, "fanout");
-        channel.queueDeclare(fanoutQueueName, false, false, false, null);
-        channel.queueBind(fanoutQueueName, Common.FANOUT_EXCHANGE_NAME, "Whatever");
-        if (consumer == null) {
-            consumer = new QueueingConsumer(channel);
-        }
-        channel.basicConsume(fanoutQueueName, true, consumer);
+    public void sendLogPropagationMessage(String routingKey, LogPropMessage message) throws IOException {
+        channel.basicPublish(Common.LOG_DIRECT_EXCHANGE_NAME, routingKey, null,
+                new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
     }
 
     private long getCurrentTimestamp() {
@@ -131,19 +181,6 @@ public class DataCenter implements Runnable {
     }
 
     /**
-     * 
-     * Description: Send log propagation message
-     * 
-     * @param message
-     * @throws IOException
-     *             void
-     */
-    public void sendLogPropagationMessage(LogPropMessage message) throws IOException {
-        channel.basicPublish(Common.FANOUT_EXCHANGE_NAME, "Whatever", null,
-                new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
-    }
-
-    /**
      * Datacenter run method, wait for incoming client request
      */
     public void run() {
@@ -152,15 +189,15 @@ public class DataCenter implements Runnable {
         logger.info("Data Center: " + this.dataCenterName + " is Running");
         try {
             this.bindToClientExchange();
-            this.bindToFanoutExchange();
+            this.bindToLogExchange();
         } catch (Exception e) {
-            logger.error("Binding to exchange failed");
+            logger.error("Binding to client/log exchange failed");
             System.exit(-1);
         }
-        //Start Log propagation
+        // Start Log propagation
         new Thread(new LogPropagationThread(this)).start();
-        
-        //Receive Log
+
+        // Receive Log
         try {
             while (true) {
                 delivery = consumer.nextDelivery();
@@ -173,7 +210,7 @@ public class DataCenter implements Runnable {
                         ClientRequestMessage request = (ClientRequestMessage) wrapper.getDeSerializedInnerMessage();
                         // System.out.println("BEGIN REQUEST");
                         logger.info("Client message received");
-                        MessageType t = request.getType();
+                        ClientMessageType t = request.getType();
                         switch (t) {
                         case BEGIN:
                             logger.info("BEGIN MESSAGE");
@@ -195,7 +232,7 @@ public class DataCenter implements Runnable {
                         }
                     }
                     else if (wrapper.getmessageclass() == LogPropMessage.class) {
-                        LogPropMessage logPropMessage = (LogPropMessage)wrapper.getDeSerializedInnerMessage();
+                        LogPropMessage logPropMessage = (LogPropMessage) wrapper.getDeSerializedInnerMessage();
                         logger.info("Log prop from:" + logPropMessage.getDataCenterName());
                     }
                 }
@@ -207,18 +244,16 @@ public class DataCenter implements Runnable {
 
     private static class LogPropagationThread implements Runnable {
         private DataCenter dc;
-        
-        
+
         public LogPropagationThread(DataCenter dc) {
             super();
             this.dc = dc;
         }
 
-
         public void run() {
             // TODO Auto-generated method stub
-            while(true){
-                if(dc.isAutoLogPropagation){
+            while (true) {
+                if (dc.isAutoLogPropagation) {
                     try {
                         dc.sendLogPropagationMessage(new LogPropMessage(dc.dataCenterName, "Propagation"));
                         Thread.sleep(1000);
@@ -229,11 +264,11 @@ public class DataCenter implements Runnable {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
                     }
-                    
+
                 }
             }
         }
-        
+
     }
 
     public static void main(String[] args) throws Exception {

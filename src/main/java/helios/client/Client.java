@@ -3,7 +3,7 @@ package helios.client;
 import helios.message.ClientRequestMessage;
 import helios.message.ClientRequestMessageFactory;
 import helios.message.Message;
-import helios.message.MessageType;
+import helios.message.ClientMessageType;
 import helios.message.MessageWrapper;
 import helios.misc.Common;
 

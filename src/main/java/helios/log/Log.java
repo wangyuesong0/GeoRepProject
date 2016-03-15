@@ -15,6 +15,7 @@ import java.util.List;
  */
 public class Log implements Comparable<Log>{
     private long timestamp;
+    
     private HashMap<String,String> writeSet;
     private List<String> readSet;
     

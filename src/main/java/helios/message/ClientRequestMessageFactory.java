@@ -11,24 +11,24 @@ package helios.message;
  */
 public class ClientRequestMessageFactory {
     public static ClientRequestMessage createBeginMessage(String clientName, String routingKey) {
-        return new ClientRequestMessage(MessageType.BEGIN, clientName, routingKey);
+        return new ClientRequestMessage(ClientMessageType.BEGIN, clientName, routingKey);
     }
 
     public static ClientRequestMessage createWriteMessage(String clientName, Integer txnNum, String routingKey, String writeKey,
             String writeValue) {
-        return new ClientRequestMessage(MessageType.WRITE, clientName, routingKey, writeKey, writeValue, txnNum);
+        return new ClientRequestMessage(ClientMessageType.WRITE, clientName, routingKey, writeKey, writeValue, txnNum);
     }
 
     public static ClientRequestMessage createReadMessage(String clientName, Integer txnNum, String routingKey, String readKey) {
-        return new ClientRequestMessage(MessageType.READ, clientName, routingKey, readKey, txnNum);
+        return new ClientRequestMessage(ClientMessageType.READ, clientName, routingKey, readKey, txnNum);
     }
 
     public static ClientRequestMessage createCommitMessage(String clientName, Integer txnNum, String routingKey) {
-        return new ClientRequestMessage(MessageType.COMMIT, clientName, routingKey, txnNum);
+        return new ClientRequestMessage(ClientMessageType.COMMIT, clientName, routingKey, txnNum);
     }
 
     public static ClientRequestMessage createAbortMessage(String clientName, Integer txnNum, String routingKey) {
-        return new ClientRequestMessage(MessageType.ABORT, clientName, routingKey, txnNum);
+        return new ClientRequestMessage(ClientMessageType.ABORT, clientName, routingKey, txnNum);
     }
 
 }

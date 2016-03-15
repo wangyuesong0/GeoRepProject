@@ -11,24 +11,24 @@ package helios.message;
  */
 public class LogPropMessage extends Message {
 //    private MessageType type;
-    private String dataCenterName;
+    private String sourceDataCenterName;
     private String info;
   
     
     public LogPropMessage(String dataCenterName, String info) {
         super();
-        this.dataCenterName = dataCenterName;
+        this.sourceDataCenterName = dataCenterName;
         this.info = info;
     }
 
    
     public String getDataCenterName() {
-        return dataCenterName;
+        return sourceDataCenterName;
     }
 
 
     public void setDataCenterName(String dataCenterName) {
-        this.dataCenterName = dataCenterName;
+        this.sourceDataCenterName = dataCenterName;
     }
 
 

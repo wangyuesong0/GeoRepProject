@@ -9,6 +9,6 @@ package helios.message;
  * @date Feb 28, 2016 1:51:33 PM
  * @version V1.0  
  */
-public enum MessageType {
+public enum ClientMessageType {
     BEGIN,READ,WRITE,COMMIT,ABORT
 }
