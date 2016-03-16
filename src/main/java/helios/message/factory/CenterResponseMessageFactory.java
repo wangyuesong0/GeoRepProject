@@ -1,5 +1,7 @@
 package helios.message.factory;
 
+import helio.fakedb.DatastoreEntry;
+import helios.message.CenterMessageType;
 import helios.message.CenterResponseMessage;
 
 /**
@@ -12,7 +14,12 @@ import helios.message.CenterResponseMessage;
  * @version V1.0
  */
 public class CenterResponseMessageFactory {
-    public static CenterResponseMessage createResponseMessage(String routingKey, long txnNum) {
-        return new CenterResponseMessage(routingKey, txnNum);
+    public static CenterResponseMessage createBeginResponseMessage(String routingKey, long txnNum) {
+        return new CenterResponseMessage(CenterMessageType.BEGIN, routingKey, txnNum);
+    }
+
+    public static CenterResponseMessage createReadResponseMessage(String routingKey, long txnNum,
+            DatastoreEntry entry) {
+        return new CenterResponseMessage(CenterMessageType.READ, routingKey, txnNum, entry);
     }
 }

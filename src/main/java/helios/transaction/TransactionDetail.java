@@ -10,15 +10,28 @@ package helios.transaction;
  * @version V1.0
  */
 public class TransactionDetail {
-    private int txnNum;
+    private long txnNum;
     private Transaction transaction;
     private String clientName;
 
-    public int getTxnNum() {
+    public TransactionDetail(long txnNum, Transaction transaction, String clientName) {
+        super();
+        this.txnNum = txnNum;
+        this.transaction = transaction;
+        this.clientName = clientName;
+    }
+
+    public TransactionDetail(long txnNum, String clientName) {
+        super();
+        this.txnNum = txnNum;
+        this.clientName = clientName;
+    }
+
+    public long getTxnNum() {
         return txnNum;
     }
 
-    public void setTxnNum(int txnNum) {
+    public void setTxnNum(long txnNum) {
         this.txnNum = txnNum;
     }
 

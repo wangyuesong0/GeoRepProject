@@ -1,5 +1,7 @@
 package helios.message;
 
+import helio.fakedb.DatastoreEntry;
+
 /**
  * @Project: helios
  * @Title: CenterResponseMessage.java
@@ -11,9 +13,11 @@ package helios.message;
  */
 public class CenterResponseMessage extends Message {
 
+    private CenterMessageType type;
     // Client's name
     private String routingKey;
     private long txnNum;
+    private DatastoreEntry readEntry;
 
     /**
      * @param type
@@ -24,10 +28,37 @@ public class CenterResponseMessage extends Message {
         // TODO Auto-generated constructor stub
     }
 
-    public CenterResponseMessage(String routingKey, long txnNum) {
+    public CenterMessageType getType() {
+        return type;
+    }
+
+    public void setType(CenterMessageType type) {
+        this.type = type;
+    }
+
+    public DatastoreEntry getReadEntry() {
+        return readEntry;
+    }
+
+    public void setReadEntry(DatastoreEntry readEntry) {
+        this.readEntry = readEntry;
+    }
+
+    // Begin
+    public CenterResponseMessage(CenterMessageType type, String routingKey, long txnNum) {
         super();
+        this.type = type;
         this.routingKey = routingKey;
         this.txnNum = txnNum;
+    }
+
+    // Read
+    public CenterResponseMessage(CenterMessageType type, String routingKey, long txnNum, DatastoreEntry readEntry) {
+        super();
+        this.type = type;
+        this.routingKey = routingKey;
+        this.txnNum = txnNum;
+        this.readEntry = readEntry;
     }
 
     public String getRoutingKey() {

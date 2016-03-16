@@ -14,11 +14,18 @@ import java.util.List;
  */
 public abstract class Transaction {
     protected HashMap<String, String> writeSet;
-    protected HashMap<String, String> readSet;
+    protected HashMap<String, Long> readSet;
     protected long timestamp;
 
     // Calculated kts to other datacenters
     protected HashMap<String, Integer> kts;
+
+    public Transaction() {
+        super();
+        this.writeSet = new HashMap<String, String>();
+        this.readSet = new HashMap<String, Long>();
+        this.kts = new HashMap<String, Integer>();
+    }
 
     public HashMap<String, String> getWriteSet() {
         return writeSet;
@@ -28,11 +35,11 @@ public abstract class Transaction {
         this.writeSet = writeSet;
     }
 
-    public HashMap<String, String> getReadSet() {
+    public HashMap<String, Long> getReadSet() {
         return readSet;
     }
 
-    public void setReadSet(HashMap<String, String> readSet) {
+    public void setReadSet(HashMap<String, Long> readSet) {
         this.readSet = readSet;
     }
 

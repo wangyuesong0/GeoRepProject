@@ -1,5 +1,6 @@
 package helios.client;
 
+import helios.message.CenterMessageType;
 import helios.message.CenterResponseMessage;
 import helios.message.ClientRequestMessage;
 import helios.message.MessageWrapper;
@@ -178,10 +179,19 @@ public class Client implements Runnable {
                 }
                 if (wrapper != null) {
                     if (wrapper.getmessageclass() == CenterResponseMessage.class) {
-                        CenterResponseMessage logPropMessage = (CenterResponseMessage) wrapper
+                        CenterResponseMessage reponseMessage = (CenterResponseMessage) wrapper
                                 .getDeSerializedInnerMessage();
                         logger.info("Client:" + this.clientName + " get feedback message from datacenter");
-                        logger.info(logPropMessage);
+                        logger.info(reponseMessage);
+                        CenterMessageType t = reponseMessage.getType();
+                        switch (t) {
+                        case BEGIN:
+                            break;
+                        case READ:
+                            break;
+                        default:
+                            break;
+                        }
                     }
                 }
             }

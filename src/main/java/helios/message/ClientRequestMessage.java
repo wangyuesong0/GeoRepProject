@@ -19,7 +19,7 @@ public class ClientRequestMessage extends Message {
     private String writeKey;
     private String readKey;
     private String writeValue;
-    private Integer txnNum;
+    private long txnNum;
     
     private String routingKey;
 
@@ -33,7 +33,7 @@ public class ClientRequestMessage extends Message {
      * @param txnNum
      */
     public ClientRequestMessage(ClientMessageType type, String clientName, String routingKey, String writeKey,
-            String writeValue, Integer txnNum) {
+            String writeValue, long txnNum) {
         super();
         this.type = type;
         this.routingKey = routingKey;
@@ -112,11 +112,11 @@ public class ClientRequestMessage extends Message {
         this.writeValue = writeValue;
     }
 
-    public Integer getTxnNum() {
+    public long getTxnNum() {
         return txnNum;
     }
 
-    public void setTxnNum(Integer txnNum) {
+    public void setTxnNum(long txnNum) {
         this.txnNum = txnNum;
     }
 

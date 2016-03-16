@@ -1,5 +1,8 @@
 package helios.datacenter;
 
+import helio.fakedb.Datastore;
+import helio.fakedb.DatastoreEntry;
+import helios.message.CenterMessageType;
 import helios.message.CenterResponseMessage;
 import helios.message.ClientMessageType;
 import helios.message.ClientRequestMessage;
@@ -38,6 +41,8 @@ public class DataCenter implements Runnable {
     private ConnectionFactory factory;
     private Connection connection;
     private Channel channel;
+
+    private Datastore datastore;
 
     // UNIQUE routing key
     private String dataCenterName;
@@ -84,7 +89,7 @@ public class DataCenter implements Runnable {
 
     // To keep user's transaction that haven't been committed by user. TxnNum -> TransactionDetail
     // Will generate a transaction in PTPool and a log in logs when user commit it
-    private HashMap<Integer, TransactionDetail> txnDetails;
+    private HashMap<Long, TransactionDetail> txnDetails;
 
     // Log propagation switch
     private boolean isAutoLogPropagation = true;
@@ -105,6 +110,7 @@ public class DataCenter implements Runnable {
             int[] dataCenterLocations)
             throws Exception {
         super();
+
         this.dataCenterName = dataCenterName;
         this.location = location;
         this.dataCenterNames = dataCenterNames;
@@ -117,6 +123,7 @@ public class DataCenter implements Runnable {
         clientMessageDirectQueueName = Common.getClientMessageReceiverDirectQueueName(dataCenterName);
         logPropagationDirectQueueName = Common.getDatacenterLogPropagationDirectQueueName(dataCenterName);
 
+        datastore = new Datastore();
         factory = new ConnectionFactory();
         factory.setHost(Common.MQ_HOST_NAME);
         connection = factory.newConnection();
@@ -124,7 +131,7 @@ public class DataCenter implements Runnable {
         rDict = new long[totalNumOfDataCenters];
         PTPool = new PriorityQueue<Transaction>();
         EPTPool = new PriorityQueue<Transaction>();
-        txnDetails = new HashMap<Integer, TransactionDetail>();
+        txnDetails = new HashMap<Long, TransactionDetail>();
     }
 
     // Generate RTT list based on location setting of data centers
@@ -207,8 +214,8 @@ public class DataCenter implements Runnable {
      * @throws IOException
      *             void
      */
-    public void sendCenterResponseMessage(String routingKey, CenterResponseMessage message) throws IOException {
-        channel.basicPublish(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, routingKey, null,
+    public void sendCenterResponseMessage(CenterResponseMessage message) throws IOException {
+        channel.basicPublish(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, message.getRoutingKey(), null,
                 new MessageWrapper(Common.Serialize(message), message.getClass()).getSerializedMessage().getBytes());
     }
 
@@ -334,9 +341,11 @@ public class DataCenter implements Runnable {
      * 
      * @param request
      *            void
+     * @throws IOException
      */
-    private void handleCommitMessage(ClientRequestMessage request) {
-        // TODO Auto-generated method stub
+    private void handleCommitMessage(ClientRequestMessage request) throws IOException {
+        long txnNum = request.getTxnNum();
+        String clientName = request.getRoutingKey();
 
     }
 
@@ -345,9 +354,25 @@ public class DataCenter implements Runnable {
      * 
      * @param request
      *            void
+     * @throws IOException
      */
-    private void handleReadMessage(ClientRequestMessage request) {
-        // TODO Auto-generated method stub
+    private void handleReadMessage(ClientRequestMessage request) throws IOException {
+        long txnNum = request.getTxnNum();
+        String clientName = request.getRoutingKey();
+
+        // Do the read
+        DatastoreEntry entry = datastore.readValue(request.getReadKey());
+
+        // Add key/version to read set
+        Transaction t = txnDetails.get(request.getTxnNum()).getTransaction();
+        t.getReadSet().put(request.getReadKey(), entry.getVersion());
+
+        // Response user with read version and value
+        CenterResponseMessage readResponseMessage = CenterResponseMessageFactory.createReadResponseMessage(
+                clientName,
+                txnNum,
+                entry);
+        sendCenterResponseMessage(readResponseMessage);
 
     }
 
@@ -358,28 +383,46 @@ public class DataCenter implements Runnable {
      *            void
      */
     private void handleWriteMessage(ClientRequestMessage request) {
-        // TODO Auto-generated method stub
+        long txnNum = request.getTxnNum();
+        String clientName = request.getRoutingKey();
 
+        // Do the write
+        datastore.writeValue(request.getWriteKey(), request.getWriteValue());
+
+        Transaction t = txnDetails.get(request.getTxnNum()).getTransaction();
+        t.getWriteSet().put(request.getWriteKey(), request.getWriteValue());
+
+        // Do not respond now
+        // CenterResponseMessage writeResponseMessage = CenterResponseMessageFactory.createWriteResponseMessage(
+        // clientName,
+        // txnNum,
+        //
+        // );
     }
 
     /**
-     * Description: TODO
+     * Description: Add transaction to dataCenter's txnDetail list.
+     * Respond client with txnNum.
      * 
      * @param request
      *            void
      * @throws IOException
-     * @throws InterruptedException 
+     * @throws InterruptedException
      */
     private void handleBeginMessage(ClientRequestMessage request) throws IOException, InterruptedException {
-        // TODO Auto-generated method stub
-        logger.info(request.getUid());
-        CenterResponseMessage response = CenterResponseMessageFactory.createResponseMessage(
-                request.getClientName(),
-                generateTxnNum());
-        for (int i = 0; i < 5; i++) {
-            Thread.sleep(3000);
-            sendCenterResponseMessage(request.getClientName(), response);
-        }
+        // Create an entry in txnDetails
+        long txnNum = generateTxnNum();
+        String clientName = request.getRoutingKey();
+
+        TransactionDetail txnDetail = new TransactionDetail(txnNum, clientName);
+        this.txnDetails.put(txnNum, txnDetail);
+        CenterResponseMessage beginResponse = CenterResponseMessageFactory.createBeginResponseMessage(
+                clientName,
+                txnNum
+                );
+
+        sendCenterResponseMessage(beginResponse);
+
     }
 
     private static class LogPropagationThread implements Runnable {
