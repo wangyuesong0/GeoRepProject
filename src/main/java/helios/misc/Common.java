@@ -18,14 +18,21 @@ public class Common {
     public final static String LOG_DIRECT_EXCHANGE_NAME = "logPropDirectExchange";
     // For client send request to data center, with routing key
     public final static String CLIENT_REQUEST_DIRECT_EXCHANGE_NAME = "clientRequestDirectExchange";
-//    public final static String DC_RESPONSE_DIRECT_EXCHANGE_NAME = "dcResponseDirectExchange";
+    // public final static String DC_RESPONSE_DIRECT_EXCHANGE_NAME = "dcResponseDirectExchange";
     public final static String MQ_HOST_NAME = "rabbithost";
 
-    public static String getClientMessageDirectQueueName(String dataCenterName) {
-        return dataCenterName + "client.direct.queue";
+    // Client as a receiver
+    public static String getDatacenterFeedbackMessageReceiverDirectQueue(String clientName) {
+        return clientName + ".datacenterFeedbackMessageReceiver.direct.queue";
     }
-    public static String getLogPropgationDirectQueueName(String dataCenterName) {
-        return dataCenterName + "log.direct.queue";
+
+    // Datacenter as receiver
+    public static String getClientMessageReceiverDirectQueueName(String dataCenterName) {
+        return dataCenterName + ".clientMessageReceiver.direct.queue";
+    }
+
+    public static String getDatacenterLogPropagationDirectQueueName(String dataCenterName) {
+        return dataCenterName + ".logPropagation.direct.queue";
     }
 
     /**

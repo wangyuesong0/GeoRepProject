@@ -1,10 +1,9 @@
 package helios.client;
 
+import helios.message.CenterResponseMessage;
 import helios.message.ClientRequestMessage;
-import helios.message.ClientRequestMessageFactory;
-import helios.message.Message;
-import helios.message.ClientMessageType;
 import helios.message.MessageWrapper;
+import helios.message.factory.ClientRequestMessageFactory;
 import helios.misc.Common;
 
 import java.io.IOException;
@@ -15,6 +14,7 @@ import org.apache.log4j.Logger;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.QueueingConsumer;
 
 /**
  * @Project: helios
@@ -32,14 +32,34 @@ public class Client implements Runnable {
     private Channel channel;
     // UNIQUE routing key
     private String clientName;
+    private String datacenterFeedbackMessageReceiverDirectQueueName;
+    private QueueingConsumer consumer;
 
-    public Client() throws IOException, TimeoutException {
+    public Client(String clientName) throws IOException, TimeoutException {
         super();
+        this.clientName = clientName;
         factory = new ConnectionFactory();
         // NEED TO SETUP HOSTS FILE
-        factory.setHost("rabbithost");
+        factory.setHost(Common.MQ_HOST_NAME);
         connection = factory.newConnection();
         channel = connection.createChannel();
+        this.datacenterFeedbackMessageReceiverDirectQueueName = Common
+                .getDatacenterFeedbackMessageReceiverDirectQueue(clientName);
+
+    }
+
+    public void bindToDatacenterMessageReceiverQueue() throws Exception {
+        channel.exchangeDeclare(Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME, "direct");
+        channel.queueDeclare(this.datacenterFeedbackMessageReceiverDirectQueueName, false, false, false, null);
+        // 使用datacenterFeedbackMessageReceiverDirectQueueName这个Queue绑定到Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME这个exchange上，routing
+        // key为clientName
+        channel.queueBind(this.datacenterFeedbackMessageReceiverDirectQueueName,
+                Common.CLIENT_REQUEST_DIRECT_EXCHANGE_NAME,
+                this.clientName);
+        if (consumer == null) {
+            consumer = new QueueingConsumer(channel);
+        }
+        channel.basicConsume(this.datacenterFeedbackMessageReceiverDirectQueueName, true, consumer);
     }
 
     /**
@@ -127,17 +147,54 @@ public class Client implements Runnable {
         sendMessageToDataCenter(ClientRequestMessageFactory.createAbortMessage(this.clientName, txnNum, routingKey));
     }
 
-    public static void main(String[] args) throws Exception {
-        Client c = new Client();
-        c.sendBeginMessage("test");
-        c.sendWriteMessage("test", 1, "Hello", "Hello");
-    }
+    // public static void main(String[] args) throws Exception {
+    // Client c = new Client();
+    // c.sendBeginMessage("test");
+    // c.sendWriteMessage("test", 1, "Hello", "Hello");
+    // }
 
     /**
      * Setup client message receiver
      */
     public void run() {
         // TODO Auto-generated method stub
+        MessageWrapper wrapper = null;
+        QueueingConsumer.Delivery delivery;
+        logger.info("Client: " + this.clientName + " is Running");
+        try {
+            this.bindToDatacenterMessageReceiverQueue();
+        } catch (Exception e) {
+            logger.error("Client: " + this.clientName + " bind to client request exchange failed");
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+        try {
+            while (true) {
+                delivery = consumer.nextDelivery();
+                if (delivery != null) {
+                    String msg = new String(delivery.getBody());
+                    wrapper = MessageWrapper.getDeSerializedMessage(msg);
+                }
+                if (wrapper != null) {
+                    if (wrapper.getmessageclass() == CenterResponseMessage.class) {
+                        CenterResponseMessage logPropMessage = (CenterResponseMessage) wrapper
+                                .getDeSerializedInnerMessage();
+                        logger.info("Client:" + this.clientName + " get feedback message from datacenter");
+                        logger.info(logPropMessage);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public static void main(String[] args) throws IOException, TimeoutException {
+        Client a = new Client("shit");
+        new Thread(a).start();
+        a.sendBeginMessage("dc1");
 
     }
 

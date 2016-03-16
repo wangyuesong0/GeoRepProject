@@ -20,6 +20,7 @@ public class ClientRequestMessage extends Message {
     private String readKey;
     private String writeValue;
     private Integer txnNum;
+    
     private String routingKey;
 
     /** 

@@ -1,4 +1,7 @@
-package helios.message;
+package helios.message.factory;
+
+import helios.message.ClientMessageType;
+import helios.message.ClientRequestMessage;
 
 /**
  * @Project: helios
