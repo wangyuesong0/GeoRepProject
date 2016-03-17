@@ -1,5 +1,7 @@
 package helio.fakedb;
 
+import helios.misc.Common;
+
 import java.util.Date;
 import java.util.HashMap;
 
@@ -15,18 +17,18 @@ import java.util.HashMap;
 public class Datastore {
     private HashMap<String, DatastoreEntry> values;
 
-//    public HashMap<Long, DatastoreEntry> getValues() {
-//        return values;
-//    }
-//
-//    public void setValues(HashMap<Long, DatastoreEntry> values) {
-//        this.values = values;
-//    }
+    // public HashMap<Long, DatastoreEntry> getValues() {
+    // return values;
+    // }
+    //
+    // public void setValues(HashMap<Long, DatastoreEntry> values) {
+    // this.values = values;
+    // }
 
     public void writeValue(String key, String value) {
         DatastoreEntry entry = new DatastoreEntry();
         // Version timestamp
-        entry.setVersion(new Date().getTime());
+        entry.setVersion(Common.getTimeStamp());
         entry.setValue(value);
         values.put(key, entry);
     }

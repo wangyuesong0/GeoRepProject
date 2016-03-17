@@ -2,7 +2,7 @@ package helios.datacenter;
 
 import helio.fakedb.Datastore;
 import helio.fakedb.DatastoreEntry;
-import helios.message.CenterMessageType;
+import helios.log.Log;
 import helios.message.CenterResponseMessage;
 import helios.message.ClientMessageType;
 import helios.message.ClientRequestMessage;
@@ -10,16 +10,18 @@ import helios.message.LogPropMessage;
 import helios.message.MessageWrapper;
 import helios.message.factory.CenterResponseMessageFactory;
 import helios.misc.Common;
+import helios.transaction.FinishedTransaction;
+import helios.transaction.PreparingTransaction;
 import helios.transaction.Transaction;
-import helios.transaction.TransactionDetail;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Iterator;
 import java.util.PriorityQueue;
+import java.util.Set;
 
-import javax.sound.midi.MidiDevice.Info;
+import javax.sql.PooledConnection;
 
 import org.apache.log4j.Logger;
 
@@ -79,17 +81,17 @@ public class DataCenter implements Runnable {
     private HashMap<String, Integer> commitOffsets;
 
     // Local transaction pool
-    private PriorityQueue<Transaction> PTPool;
+    private PriorityQueue<PreparingTransaction> PTPool;
 
     // External transaction pool
-    private PriorityQueue<Transaction> EPTPool;
+    private PriorityQueue<PreparingTransaction> EPTPool;
 
     // Shared log pool
-    private PriorityQueue<Transaction> logs;
+    private PriorityQueue<Log> logs;
 
     // To keep user's transaction that haven't been committed by user. TxnNum -> TransactionDetail
     // Will generate a transaction in PTPool and a log in logs when user commit it
-    private HashMap<Long, TransactionDetail> txnDetails;
+    private HashMap<Long, PreparingTransaction> uncommitedTxnDetails;
 
     // Log propagation switch
     private boolean isAutoLogPropagation = true;
@@ -129,9 +131,9 @@ public class DataCenter implements Runnable {
         connection = factory.newConnection();
         channel = connection.createChannel();
         rDict = new long[totalNumOfDataCenters];
-        PTPool = new PriorityQueue<Transaction>();
-        EPTPool = new PriorityQueue<Transaction>();
-        txnDetails = new HashMap<Long, TransactionDetail>();
+        PTPool = new PriorityQueue<PreparingTransaction>();
+        EPTPool = new PriorityQueue<PreparingTransaction>();
+        uncommitedTxnDetails = new HashMap<Long, PreparingTransaction>();
     }
 
     // Generate RTT list based on location setting of data centers
@@ -225,21 +227,6 @@ public class DataCenter implements Runnable {
         super.finalize();
         this.channel.close();
         this.connection.close();
-    }
-
-    /**
-     * BELOW ARE UTILIY METHODS
-     * 
-     */
-
-    private long getCurrentTimestamp() {
-        return System.currentTimeMillis() / 1000L;
-    }
-
-    private long generateTxnNum() {
-        long value = this.txnNumGenerator;
-        this.txnNumGenerator++;
-        return value;
     }
 
     /**
@@ -347,6 +334,23 @@ public class DataCenter implements Runnable {
         long txnNum = request.getTxnNum();
         String clientName = request.getRoutingKey();
 
+        PreparingTransaction txn = uncommitedTxnDetails.get(txnNum);
+
+        // If conflict or being overriten just abort
+        if (isConflict(txn) || isOverriten(txn)) {
+            uncommitedTxnDetails.remove(txnNum);
+            CenterResponseMessageFactory.createAbortReponseMessage(clientName, txnNum);
+            return;
+        }
+        txn.setTimestamp(Common.getTimeStamp());
+        txn.generateKTS(this.commitOffsets);
+
+        // Add to local preparing txns
+        PTPool.add(txn);
+        // Add to log
+        logs.add(new Log(txn));
+        // Move out of uncommitedTxns
+        uncommitedTxnDetails.remove(txnNum);
     }
 
     /**
@@ -364,7 +368,7 @@ public class DataCenter implements Runnable {
         DatastoreEntry entry = datastore.readValue(request.getReadKey());
 
         // Add key/version to read set
-        Transaction t = txnDetails.get(request.getTxnNum()).getTransaction();
+        Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
         t.getReadSet().put(request.getReadKey(), entry.getVersion());
 
         // Response user with read version and value
@@ -389,15 +393,8 @@ public class DataCenter implements Runnable {
         // Do the write
         datastore.writeValue(request.getWriteKey(), request.getWriteValue());
 
-        Transaction t = txnDetails.get(request.getTxnNum()).getTransaction();
+        Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
         t.getWriteSet().put(request.getWriteKey(), request.getWriteValue());
-
-        // Do not respond now
-        // CenterResponseMessage writeResponseMessage = CenterResponseMessageFactory.createWriteResponseMessage(
-        // clientName,
-        // txnNum,
-        //
-        // );
     }
 
     /**
@@ -414,8 +411,10 @@ public class DataCenter implements Runnable {
         long txnNum = generateTxnNum();
         String clientName = request.getRoutingKey();
 
-        TransactionDetail txnDetail = new TransactionDetail(txnNum, clientName);
-        this.txnDetails.put(txnNum, txnDetail);
+        // Create a transactionDetail with a preparingTransaction entity inside
+        PreparingTransaction txn = new PreparingTransaction(txnNum, clientName, this.dataCenterName);
+        uncommitedTxnDetails.put(txnNum, txn);
+
         CenterResponseMessage beginResponse = CenterResponseMessageFactory.createBeginResponseMessage(
                 clientName,
                 txnNum
@@ -458,6 +457,160 @@ public class DataCenter implements Runnable {
             }
         }
 
+    }
+
+    /**
+     * PRIVATE UTIL METHODS
+     */
+
+    private long generateTxnNum() {
+        long value = this.txnNumGenerator;
+        this.txnNumGenerator++;
+        return value;
+    }
+
+    /**
+     * Description: TODO
+     * 
+     * @param txn
+     * @return
+     *         boolean
+     */
+    private boolean isOverriten(PreparingTransaction txn) {
+        HashMap<String, Long> readSet = txn.getReadSet();
+        Set<String> readKeySet = readSet.keySet();
+        Iterator<String> iter = readKeySet.iterator();
+        while (iter.hasNext()) {
+            String key = iter.next();
+            Long txnVersion = readSet.get(key);
+            // FIXME Datastore operations
+            Long upToDateVersion = datastore.readValue(key).getVersion();
+            if (!txnVersion.equals(upToDateVersion)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Description: TODO
+     * 
+     * @param txn
+     * @param iter
+     * @return
+     *         boolean
+     */
+    private boolean isConflict(PreparingTransaction txn) {
+        boolean isConflict = false;
+        Iterator<PreparingTransaction> iter = PTPool.iterator();
+        // Local & External preparing transactions conflict detections
+        while (iter.hasNext()) {
+            if (isTwoTransactionConflict(txn, iter.next()))
+            {
+                isConflict = true;
+                break;
+            }
+        }
+        if (!isConflict) {
+            iter = EPTPool.iterator();
+            while (iter.hasNext()) {
+                if (isTwoTransactionConflict(txn, iter.next()))
+                {
+                    isConflict = true;
+                    break;
+                }
+            }
+        }
+        return isConflict;
+    }
+
+    /**
+     * Description: TODO
+     * 
+     * @param txn
+     * @param next
+     * @return
+     *         boolean
+     */
+    private boolean isTwoTransactionConflict(Transaction txn, Transaction localOrExtTxn) {
+        Set<String> txnReadSet = txn.getReadSet().keySet();
+        Set<String> txnWriteSet = txn.getWriteSet().keySet();
+
+        Set<String> localOrExtTxnWriteSet = localOrExtTxn.getWriteSet().keySet();
+        for (String s : localOrExtTxnWriteSet) {
+            if (txnReadSet.contains(s) || txnWriteSet.contains(s))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * 
+     * Description: Log scan
+     * @throws IOException
+     * void
+     */
+    public void processLogs() throws IOException {
+        Iterator<Log> iter = logs.iterator();
+        while (iter.hasNext()) {
+            Log l = iter.next();
+            Transaction t = l.getTransaction();
+            // Skip local transactions
+            if (t.getDatacenterName().equals(this.dataCenterName)) {
+                continue;
+            }
+            // Check conflict with local Preparing Transaction
+            Iterator<PreparingTransaction> ptPoolIter = PTPool.iterator();
+            while (ptPoolIter.hasNext()) {
+                PreparingTransaction ptPoolTxn = ptPoolIter.next();
+                // FIXME
+                // Log contains a conflicting transaction with local preparing transaction, Abort local preparing
+                // transaction
+                if (isTwoTransactionConflict(t, ptPoolTxn)) {
+                    // Create an aborted log
+                    FinishedTransaction finishedTranscation = new FinishedTransaction(ptPoolTxn);
+                    finishedTranscation.setCommitted(false);
+                    finishedTranscation.setTimestamp(Common.getTimeStamp());
+                    // Sent abort message
+                    sendCenterResponseMessage(CenterResponseMessageFactory.createAbortReponseMessage(
+                            finishedTranscation.getClientName(), finishedTranscation.getTxnNum()));
+                    logs.add(new Log(finishedTranscation));
+                }
+
+                // Log contains a preparing transaction
+                if (l.isPreparing()) {
+                    EPTPool.add((PreparingTransaction) l.getTransaction());
+                }
+                // FIXME Database operation
+                // Log contains a finished transaction
+                else if (l.isFinished()) {
+                    // Commited one, don't care aborted one
+                    if (((FinishedTransaction) t).isCommitted()) {
+                        HashMap<String, String> writeSet = t.getWriteSet();
+                        Iterator<String> writeSetIter = writeSet.keySet().iterator();
+                        while (iter.hasNext()) {
+                            String key = writeSetIter.next();
+                            datastore.writeValue(key, writeSet.get(key));
+                        }
+                    }
+
+                    // Remove this transaction from EPTPool
+                    PreparingTransaction target = null;
+                    Iterator<PreparingTransaction> iterator = EPTPool.iterator();
+                    while (iterator.hasNext()) {
+                        PreparingTransaction next = iterator.next();
+                        if (next.getTxnNum() == t.getTxnNum()) {
+                            target = next;
+                            break;
+                        }
+                    }
+                    if (target == null) {
+                        logger.info("Error while removing preparing transaction from EPTPool");
+                    }
+                    EPTPool.remove(target);
+                }
+            }
+        }
     }
 
     public static void main(String[] args) throws Exception {

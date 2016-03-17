@@ -1,5 +1,7 @@
 package helios.misc;
 
+import java.util.Date;
+
 import helios.message.MessageWrapper;
 
 import com.google.gson.Gson;
@@ -64,5 +66,9 @@ public class Common {
     {
         Class<?> cls = Class.forName(s);
         return cls;
+    }
+
+    public static long getTimeStamp() {
+        return new Date().getTime();
     }
 }
