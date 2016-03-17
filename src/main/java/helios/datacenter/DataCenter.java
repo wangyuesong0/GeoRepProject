@@ -21,8 +21,6 @@ import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.Set;
 
-import javax.sql.PooledConnection;
-
 import org.apache.log4j.Logger;
 
 import com.rabbitmq.client.Channel;
@@ -71,7 +69,8 @@ public class DataCenter implements Runnable {
     private int totalNumOfDataCenters;
 
     // Now I just understand one row's function... Just use it
-    private long[] rDict;
+    // private long[] rDict;
+    private HashMap<String, Long> rDict;
 
     // To simulate log propagation latencies, generate by subtracting location attribute
     private HashMap<String, Integer> RTTLatencies;
@@ -88,6 +87,9 @@ public class DataCenter implements Runnable {
 
     // Shared log pool
     private PriorityQueue<Log> logs;
+
+    // For the sake of simplicity, create an unsent log pool for log propagation
+    private PriorityQueue<Log> unsentLogs;
 
     // To keep user's transaction that haven't been committed by user. TxnNum -> TransactionDetail
     // Will generate a transaction in PTPool and a log in logs when user commit it
@@ -108,7 +110,8 @@ public class DataCenter implements Runnable {
      * @param totalNumOfDataCenters
      * @throws Exception
      */
-    public DataCenter(String dataCenterName, int dataCenterIndex, int location, String[] dataCenterNames,
+
+    public DataCenter(String dataCenterName, int location, String[] dataCenterNames,
             int[] dataCenterLocations)
             throws Exception {
         super();
@@ -130,10 +133,13 @@ public class DataCenter implements Runnable {
         factory.setHost(Common.MQ_HOST_NAME);
         connection = factory.newConnection();
         channel = connection.createChannel();
-        rDict = new long[totalNumOfDataCenters];
+        rDict = new HashMap<String, Long>();
         PTPool = new PriorityQueue<PreparingTransaction>();
         EPTPool = new PriorityQueue<PreparingTransaction>();
         uncommitedTxnDetails = new HashMap<Long, PreparingTransaction>();
+
+        logs = new PriorityQueue<Log>();
+        unsentLogs = new PriorityQueue<Log>();
     }
 
     // Generate RTT list based on location setting of data centers
@@ -271,31 +277,23 @@ public class DataCenter implements Runnable {
                         // System.out.println("BEGIN REQUEST");
                         // logger.info("Client message received");
                         ClientMessageType t = request.getType();
+                        logger.info(this.dataCenterName + " receive " + t + " message from client "
+                                + request.getClientName());
+                        logger.info(request);
                         switch (t) {
                         case BEGIN:
-                            logger.info("Receive BEGIN message from client:" + request.getClientName());
                             this.handleBeginMessage(request);
                             break;
                         case WRITE:
-                            logger.info("Receive WRITE mssage from client:" + request.getClientName());
-                            logger.info("Txn:" + request.getTxnNum() + ",Write key:" + request.getWriteKey()
-                                    + ",Write value:"
-                                    + request.getWriteValue());
                             this.handleWriteMessage(request);
                             break;
                         case READ:
-                            logger.info("Receive READ mssage from client:" + request.getClientName());
-                            logger.info("Txn:" + request.getTxnNum() + ",Read key" + request.getReadKey());
                             this.handleReadMessage(request);
                             break;
                         case COMMIT:
-                            logger.info("Receive COMMIT mssage from client:" + request.getClientName());
-                            logger.info("Txn: " + request.getTxnNum());
                             this.handleCommitMessage(request);
                             break;
                         case ABORT:
-                            logger.info("Receive ABORT mssage from client:" + request.getClientName());
-                            logger.info("Txn: " + request.getTxnNum());
                             this.handleAbortMessage(request);
                             break;
                         }
@@ -304,6 +302,12 @@ public class DataCenter implements Runnable {
                         LogPropMessage logPropMessage = (LogPropMessage) wrapper.getDeSerializedInnerMessage();
                         logger.info("Datacenter:" + this.dataCenterName + " get log prop from Datacenter:"
                                 + logPropMessage.getSourceDataCenterName());
+                        Log[] deliveredLogs = logPropMessage.getLogs();
+                        logger.info("Get " + deliveredLogs.length + " logs");
+                        for (Log l : deliveredLogs) {
+                            this.logs.add(l);
+                            logger.info(l);
+                        }
                     }
                 }
             }
@@ -320,7 +324,11 @@ public class DataCenter implements Runnable {
      */
     private void handleAbortMessage(ClientRequestMessage request) {
         // TODO Auto-generated method stub
+        long txnNum = request.getTxnNum();
+        String clientName = request.getClientName();
 
+        uncommitedTxnDetails.remove(txnNum);
+        CenterResponseMessageFactory.createAbortReponseMessage(clientName, txnNum);
     }
 
     /**
@@ -332,7 +340,7 @@ public class DataCenter implements Runnable {
      */
     private void handleCommitMessage(ClientRequestMessage request) throws IOException {
         long txnNum = request.getTxnNum();
-        String clientName = request.getRoutingKey();
+        String clientName = request.getClientName();
 
         PreparingTransaction txn = uncommitedTxnDetails.get(txnNum);
 
@@ -348,7 +356,9 @@ public class DataCenter implements Runnable {
         // Add to local preparing txns
         PTPool.add(txn);
         // Add to log
-        logs.add(new Log(txn));
+        Log l = new Log(txn);
+        logs.add(l);
+        unsentLogs.add(l);
         // Move out of uncommitedTxns
         uncommitedTxnDetails.remove(txnNum);
     }
@@ -362,7 +372,7 @@ public class DataCenter implements Runnable {
      */
     private void handleReadMessage(ClientRequestMessage request) throws IOException {
         long txnNum = request.getTxnNum();
-        String clientName = request.getRoutingKey();
+        String clientName = request.getClientName();
 
         // Do the read
         DatastoreEntry entry = datastore.readValue(request.getReadKey());
@@ -388,12 +398,13 @@ public class DataCenter implements Runnable {
      */
     private void handleWriteMessage(ClientRequestMessage request) {
         long txnNum = request.getTxnNum();
-        String clientName = request.getRoutingKey();
+        String clientName = request.getClientName();
 
         // Do the write
         datastore.writeValue(request.getWriteKey(), request.getWriteValue());
 
         Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
+        System.out.println(t);
         t.getWriteSet().put(request.getWriteKey(), request.getWriteValue());
     }
 
@@ -409,7 +420,7 @@ public class DataCenter implements Runnable {
     private void handleBeginMessage(ClientRequestMessage request) throws IOException, InterruptedException {
         // Create an entry in txnDetails
         long txnNum = generateTxnNum();
-        String clientName = request.getRoutingKey();
+        String clientName = request.getClientName();
 
         // Create a transactionDetail with a preparingTransaction entity inside
         PreparingTransaction txn = new PreparingTransaction(txnNum, clientName, this.dataCenterName);
@@ -443,9 +454,14 @@ public class DataCenter implements Runnable {
                         Thread.sleep(fromDataCenter.RTTLatencies.get(toDataCenterName));
                         // Send log to toDataCenter, message info including sourceDataCenter info and transactions that
                         // need to be propagated
+                        int logSize = fromDataCenter.unsentLogs.size();
+                        Log[] logToBeSent = new Log[logSize];
+                        fromDataCenter.unsentLogs.toArray(logToBeSent);
                         fromDataCenter.sendLogPropagationMessage(toDataCenterName,
-                                new LogPropMessage(fromDataCenter.dataCenterName,
-                                        "Propagation"));
+                                new LogPropMessage(fromDataCenter.dataCenterName, logToBeSent
+                                ));
+                        fromDataCenter.unsentLogs.clear();
+
                     } catch (IOException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
@@ -456,7 +472,6 @@ public class DataCenter implements Runnable {
                 }
             }
         }
-
     }
 
     /**
@@ -546,11 +561,12 @@ public class DataCenter implements Runnable {
 
     /**
      * 
-     * Description: Log scan
+     * Description: Log scan(Algo2)
+     * 
      * @throws IOException
-     * void
+     *             void
      */
-    public void processLogs() throws IOException {
+    public void logsScan() throws IOException {
         Iterator<Log> iter = logs.iterator();
         while (iter.hasNext()) {
             Log l = iter.next();
@@ -574,7 +590,9 @@ public class DataCenter implements Runnable {
                     // Sent abort message
                     sendCenterResponseMessage(CenterResponseMessageFactory.createAbortReponseMessage(
                             finishedTranscation.getClientName(), finishedTranscation.getTxnNum()));
-                    logs.add(new Log(finishedTranscation));
+                    Log log = new Log(finishedTranscation);
+                    logs.add(log);
+                    unsentLogs.add(log);
                 }
 
                 // Log contains a preparing transaction
@@ -609,6 +627,52 @@ public class DataCenter implements Runnable {
                     }
                     EPTPool.remove(target);
                 }
+                // Update rDict
+                rDict.put(t.getDatacenterName(), t.getTimestamp());
+            }
+        }
+    }
+
+    /**
+     * 
+     * Description: PTPool scan for local commit
+     * void
+     * 
+     * @throws IOException
+     */
+    public void PTPoolScan() throws IOException {
+        Iterator<PreparingTransaction> iterator = PTPool.iterator();
+        while (iterator.hasNext()) {
+            PreparingTransaction pt = iterator.next();
+            boolean isCommitable = true;
+            for (String otherDatacenter : dataCenterNames) {
+                if (rDict.get(otherDatacenter) == null || rDict.get(otherDatacenter) < pt.getKts().get(otherDatacenter)) {
+                    isCommitable = false;
+                    break;
+                }
+            }
+            if (!isCommitable) {
+                continue;
+            }
+
+            // Do write operations to datastore
+            HashMap<String, String> writeSet = pt.getWriteSet();
+            Iterator<String> writeSetIterator = writeSet.keySet().iterator();
+            while (writeSetIterator.hasNext()) {
+                String key = writeSetIterator.next();
+                // FIXME datastore operations
+                datastore.writeValue(key, writeSet.get(key));
+                // Send commit message to client
+                sendCenterResponseMessage(CenterResponseMessageFactory.createCommitResponseMessage(pt.getClientName(),
+                        pt.getTxnNum()));
+
+                // Create a finished log
+                FinishedTransaction finishedTransaction = new FinishedTransaction(pt);
+                finishedTransaction.setCommitted(true);
+                finishedTransaction.setTimestamp(Common.getTimeStamp());
+                Log l = new Log(finishedTransaction);
+                logs.add(l);
+                unsentLogs.add(l);
             }
         }
     }
@@ -618,7 +682,7 @@ public class DataCenter implements Runnable {
         String[] dataCenterNames = { "dc1", "dc2" };
         int[] dataCenterLocations = { 10000, 15000 };
         for (int i = 0; i < dataCenterNames.length; i++) {
-            dataCenterList.add(new DataCenter(dataCenterNames[i], 0, dataCenterLocations[i], dataCenterNames,
+            dataCenterList.add(new DataCenter(dataCenterNames[i], dataCenterLocations[i], dataCenterNames,
                     dataCenterLocations));
         }
         for (int i = 0; i < dataCenterNames.length; i++) {

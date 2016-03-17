@@ -181,13 +181,15 @@ public class Client implements Runnable {
                     if (wrapper.getmessageclass() == CenterResponseMessage.class) {
                         CenterResponseMessage reponseMessage = (CenterResponseMessage) wrapper
                                 .getDeSerializedInnerMessage();
-                        logger.info("Client:" + this.clientName + " get feedback message from datacenter");
-                        logger.info(reponseMessage);
                         CenterMessageType t = reponseMessage.getType();
+                        logger.info("Client:" + this.clientName + " get" + t + " message from datacenter");
+                        logger.info(reponseMessage);
                         switch (t) {
                         case BEGIN:
+                            logger.info("");
                             break;
                         case READ:
+                            // Need to handle null
                             break;
                         default:
                             break;
@@ -198,7 +200,6 @@ public class Client implements Runnable {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 
     public static void main(String[] args) throws IOException, TimeoutException {

@@ -13,7 +13,7 @@ import java.util.Set;
  * @date Feb 28, 2016 1:59:28 AM
  * @version V1.0
  */
-public abstract class Transaction {
+public class Transaction {
     protected HashMap<String, String> writeSet;
     protected HashMap<String, Long> readSet;
     protected long timestamp;
@@ -44,6 +44,10 @@ public abstract class Transaction {
         this.writeSet = new HashMap<String, String>();
         this.readSet = new HashMap<String, Long>();
         this.kts = new HashMap<String, Long>();
+    }
+
+    public Transaction() {
+        super();
     }
 
     public String getDatacenterName() {
@@ -100,6 +104,12 @@ public abstract class Transaction {
 
     public void setClientName(String clientName) {
         this.clientName = clientName;
+    }
+
+    @Override
+    public String toString() {
+        return "Transaction [writeSet=" + writeSet + ", readSet=" + readSet + ", timestamp=" + timestamp + ", txnNum="
+                + txnNum + ", clientName=" + clientName + ", datacenterName=" + datacenterName + ", kts=" + kts + "]";
     }
 
 }

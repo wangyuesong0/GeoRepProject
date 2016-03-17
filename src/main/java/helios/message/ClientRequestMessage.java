@@ -143,6 +143,14 @@ public class ClientRequestMessage extends Message {
     public void setRoutingKey(String routingKey) {
         this.routingKey = routingKey;
     }
+
+    @Override
+    public String toString() {
+        return "ClientRequestMessage [type=" + type + ", clientName=" + clientName + ", writeKey=" + writeKey
+                + ", readKey=" + readKey + ", writeValue=" + writeValue + ", txnNum=" + txnNum + ", routingKey="
+                + routingKey + "]";
+    }
+    
     
     
     

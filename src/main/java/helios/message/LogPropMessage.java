@@ -1,5 +1,10 @@
 package helios.message;
 
+import helios.log.Log;
+
+import java.util.List;
+import java.util.PriorityQueue;
+
 /**
  * @Project: helios
  * @Title: LogPropMessage.java
@@ -10,14 +15,22 @@ package helios.message;
  * @version V1.0
  */
 public class LogPropMessage extends Message {
+    /**
+     * 
+     */
+    private static final long serialVersionUID = 1L;
     // private MessageType type;
     private String sourceDataCenterName;
-    private String info;
+    private Log[] logs;
 
-    public LogPropMessage(String dataCenterName, String info) {
+    public LogPropMessage() {
         super();
-        this.sourceDataCenterName = dataCenterName;
-        this.info = info;
+    }
+
+    public LogPropMessage(String sourceDataCenterName, Log[] logs) {
+        super();
+        this.sourceDataCenterName = sourceDataCenterName;
+        this.logs = logs;
     }
 
     public String getSourceDataCenterName() {
@@ -28,12 +41,12 @@ public class LogPropMessage extends Message {
         this.sourceDataCenterName = sourceDataCenterName;
     }
 
-    public String getInfo() {
-        return info;
+    public Log[] getLogs() {
+        return logs;
     }
 
-    public void setInfo(String info) {
-        this.info = info;
+    public void setLogs(Log[] logs) {
+        this.logs = logs;
     }
 
 }

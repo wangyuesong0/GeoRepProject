@@ -17,6 +17,10 @@ import java.util.HashMap;
 public class Datastore {
     private HashMap<String, DatastoreEntry> values;
 
+    public Datastore() {
+        values = new HashMap<String, DatastoreEntry>();
+    }
+
     // public HashMap<Long, DatastoreEntry> getValues() {
     // return values;
     // }
