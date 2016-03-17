@@ -22,13 +22,6 @@ public class Log implements Comparable<Log> {
     // Contains one preparing or finished transaction
     private Transaction transaction;
 
-    public boolean isPreparing() {
-        return transaction.getClass().getName().equals("PreparingTransaction");
-    }
-
-    public boolean isFinished() {
-        return transaction.getClass().getName().equals("FinishedTransaction");
-    }
 
     public Transaction getTransaction() {
         return transaction;
@@ -55,7 +48,6 @@ public class Log implements Comparable<Log> {
         this.transaction = transaction;
     }
 
-    
     @Override
     public String toString() {
         return "Log [isProcessed=" + isProcessed + ", transaction=" + transaction + "]";
@@ -63,7 +55,7 @@ public class Log implements Comparable<Log> {
 
     public int compareTo(Log o) {
         // TODO Auto-generated method stub
-        return this.getTransaction().getTimestamp() < o.getTransaction().getTimestamp() ? 1 : -1;
+        return this.getTransaction().compareTo(o.getTransaction());
     }
 
 }

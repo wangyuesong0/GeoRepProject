@@ -23,14 +23,26 @@ public class LogPropMessage extends Message {
     private String sourceDataCenterName;
     private Log[] logs;
 
+    // This is used to update rDict even there is no logs in this message
+    private long logPropTimestamp;
+
     public LogPropMessage() {
         super();
     }
 
-    public LogPropMessage(String sourceDataCenterName, Log[] logs) {
+    public long getLogPropTimestamp() {
+        return logPropTimestamp;
+    }
+
+    public void setLogPropTimestamp(long logPropTimestamp) {
+        this.logPropTimestamp = logPropTimestamp;
+    }
+
+    public LogPropMessage(String sourceDataCenterName, Log[] logs, long logPropTimestamp) {
         super();
         this.sourceDataCenterName = sourceDataCenterName;
         this.logs = logs;
+        this.logPropTimestamp = logPropTimestamp;
     }
 
     public String getSourceDataCenterName() {

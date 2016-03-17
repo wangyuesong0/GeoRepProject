@@ -29,4 +29,10 @@ public class DatastoreEntry {
         this.version = version;
     }
 
+    @Override
+    public String toString() {
+        return "DatastoreEntry [value=" + value + ", version=" + version + "]";
+    }
+
+    
 }

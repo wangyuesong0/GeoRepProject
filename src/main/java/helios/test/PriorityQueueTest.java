@@ -4,7 +4,9 @@ import helios.log.Log;
 import helios.transaction.PreparingTransaction;
 import helios.transaction.Transaction;
 
+import java.util.Iterator;
 import java.util.PriorityQueue;
+import java.util.TreeSet;
 
 /**
  * @Project: helios
@@ -17,15 +19,24 @@ import java.util.PriorityQueue;
  */
 public class PriorityQueueTest {
     public static void main(String[] args) {
-        PriorityQueue<Log> pq = new PriorityQueue<Log>();
+        TreeSet<Log> pq = new TreeSet<Log>();
         for (int i = 0; i < 5; i++) {
-            Transaction t = new PreparingTransaction(1, "1", "1");
+//            Transaction t = new Transaction(1, "1", "1");
             t.setTimestamp(i);
             pq.add(new Log(t));
         }
-        int size = pq.size();
-        for (int i = 0; i < size; i++) {
-            System.out.println(pq.poll().getTransaction().getTimestamp());
+        // int size = pq.size();
+        // for (int i = 0; i < size; i++) {
+        // System.out.println(pq.poll().getTransaction().getTimestamp());
+        // }
+        // Iterator<Log> iter = pq.iterator();
+        // while (iter.hasNext()) {
+        // Log l = iter.next();
+        // System.out.println(l.getTransaction().getTimestamp());
+        // }
+        for (Log l : pq) {
+            // Log l = iter.next();
+            System.out.println(l.getTransaction().getTimestamp());
         }
 
     }

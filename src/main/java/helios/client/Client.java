@@ -15,7 +15,9 @@ import org.apache.log4j.Logger;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.ConsumerCancelledException;
 import com.rabbitmq.client.QueueingConsumer;
+import com.rabbitmq.client.ShutdownSignalException;
 
 /**
  * @Project: helios
@@ -35,6 +37,7 @@ public class Client implements Runnable {
     private String clientName;
     private String datacenterFeedbackMessageReceiverDirectQueueName;
     private QueueingConsumer consumer;
+    private QueueingConsumer.Delivery delivery;
 
     public Client(String clientName) throws IOException, TimeoutException {
         super();
@@ -46,6 +49,14 @@ public class Client implements Runnable {
         channel = connection.createChannel();
         this.datacenterFeedbackMessageReceiverDirectQueueName = Common
                 .getDatacenterFeedbackMessageReceiverDirectQueue(clientName);
+
+        try {
+            this.bindToDatacenterMessageReceiverQueue();
+        } catch (Exception e) {
+            logger.error("Client: " + this.clientName + " bind to client request exchange failed");
+            e.printStackTrace();
+            System.exit(-1);
+        }
 
     }
 
@@ -81,11 +92,17 @@ public class Client implements Runnable {
      * 
      * @param routingKey
      *            void
-     * @throws IOException
+     * @throws Exception
      */
-    public void sendBeginMessage(String routingKey) throws IOException {
-        logger.info("Client send begin message to datacenter:" + routingKey);
+    public Long sendBeginMessage(String routingKey) throws Exception {
+        logger.info("Client" + this.clientName + " send read message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(this.clientName, routingKey));
+        CenterResponseMessage message = getNextDelivery();
+        if (message.getType() != CenterMessageType.BEGIN) {
+            throw new Exception("Not a begin message response");
+        }
+        logger.info("Client " + this.clientName + " get response:" + message);
+        return message.getTxnNum();
     }
 
     /**
@@ -95,13 +112,18 @@ public class Client implements Runnable {
      * @param routingKey
      * @param txnNum
      * @param readKey
-     * @throws IOException
-     *             void
+     * @throws Exception
      */
-    public void sendReadMessage(String routingKey, int txnNum, String readKey) throws IOException {
-        logger.info("Client send read message to datacenter:" + routingKey);
+    public String sendReadMessage(String routingKey, int txnNum, String readKey) throws Exception {
+        logger.info("Client" + this.clientName + " send read message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createReadMessage(this.clientName, txnNum, routingKey,
                 readKey));
+        CenterResponseMessage message = getNextDelivery();
+        if (message.getType() != CenterMessageType.READ) {
+            throw new Exception("Not a read message response");
+        }
+        logger.info("Client " + this.clientName + " get response:" + message);
+        return message.getReadEntry().getValue();
     }
 
     /**
@@ -126,12 +148,17 @@ public class Client implements Runnable {
      * 
      * @param routingKey
      * @param txnNum
-     * @throws IOException
-     *             void
+     * @throws Exception
      */
-    public void sendCommitMessage(String routingKey, int txnNum) throws IOException {
+    public void sendCommitMessage(String routingKey, int txnNum) throws Exception {
         logger.info("Client send commit message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createCommitMessage(this.clientName, txnNum, routingKey));
+        CenterResponseMessage message = getNextDelivery();
+        if (message.getType() != CenterMessageType.COMMIT && message.getType() != CenterMessageType.ABORT) {
+            throw new Exception("Not a commit or abort message response");
+        }
+        logger.info("Client " + this.clientName + " get response:" + message);
+
     }
 
     /**
@@ -148,11 +175,35 @@ public class Client implements Runnable {
         sendMessageToDataCenter(ClientRequestMessageFactory.createAbortMessage(this.clientName, txnNum, routingKey));
     }
 
-    // public static void main(String[] args) throws Exception {
-    // Client c = new Client();
-    // c.sendBeginMessage("test");
-    // c.sendWriteMessage("test", 1, "Hello", "Hello");
-    // }
+    /**
+     * 
+     * Description: Synchronizly waiting for center's response
+     * 
+     * @return
+     * @throws ShutdownSignalException
+     * @throws ConsumerCancelledException
+     * @throws InterruptedException
+     * @throws ClassNotFoundException
+     *             CenterResponseMessage
+     */
+    public CenterResponseMessage getNextDelivery() throws ShutdownSignalException, ConsumerCancelledException,
+            InterruptedException,
+            ClassNotFoundException {
+        delivery = consumer.nextDelivery();
+        MessageWrapper wrapper = null;
+        if (delivery != null) {
+            String msg = new String(delivery.getBody());
+            wrapper = MessageWrapper.getDeSerializedMessage(msg);
+        }
+        if (wrapper != null) {
+            if (wrapper.getmessageclass() == CenterResponseMessage.class) {
+                CenterResponseMessage reponseMessage = (CenterResponseMessage) wrapper
+                        .getDeSerializedInnerMessage();
+                return reponseMessage;
+            }
+        }
+        return null;
+    }
 
     /**
      * Setup client message receiver
@@ -182,8 +233,8 @@ public class Client implements Runnable {
                         CenterResponseMessage reponseMessage = (CenterResponseMessage) wrapper
                                 .getDeSerializedInnerMessage();
                         CenterMessageType t = reponseMessage.getType();
-                        logger.info("Client:" + this.clientName + " get" + t + " message from datacenter");
-                        logger.info(reponseMessage);
+                        logger.info("Client: " + this.clientName + " get " + t + " response from datacenter");
+                        logger.info(reponseMessage.toString());
                         switch (t) {
                         case BEGIN:
                             logger.info("");
@@ -205,7 +256,7 @@ public class Client implements Runnable {
     public static void main(String[] args) throws IOException, TimeoutException {
         Client a = new Client("shit");
         new Thread(a).start();
-        a.sendBeginMessage("dc1");
+//        a.sendBeginMessage("dc1");
 
     }
 

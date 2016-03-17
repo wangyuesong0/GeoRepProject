@@ -12,7 +12,7 @@ import helios.datacenter.DataCenter;
  * @date Mar 17, 2016 12:45:58 AM
  * @version V1.0
  */
-public class LogPropagationTest {
+public class LogScanAndPTScanTest {
     public static void main(String[] args) throws Exception {
         String[] dataCenterNames = { "dc0", "dc1" };
         int[] dataCenterLocations = new int[] { 1000, 3000 };

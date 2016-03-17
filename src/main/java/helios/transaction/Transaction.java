@@ -13,18 +13,22 @@ import java.util.Set;
  * @date Feb 28, 2016 1:59:28 AM
  * @version V1.0
  */
-public class Transaction {
-    protected HashMap<String, String> writeSet;
-    protected HashMap<String, Long> readSet;
-    protected long timestamp;
-    protected long txnNum;
+public class Transaction implements Comparable<Transaction> {
+    private TransactionType type;
+    private HashMap<String, String> writeSet;
+    private HashMap<String, Long> readSet;
+    private long txnNum;
     // The client who send this transaction
-    protected String clientName;
+    private String clientName;
     // The data center who accepts this transaction
-    protected String datacenterName;
+    private String datacenterName;
 
-    // Calculated kts to other datacenters
-    protected HashMap<String, Long> kts;
+    // Below need to be filled when committed
+    private long timestamp;
+    private HashMap<String, Long> kts;
+
+    // Only for finished transaction
+    private boolean isCommitted;
 
     // Generate KTS to other data centers according to txn timestamp and commit offsets
     public void generateKTS(HashMap<String, Integer> commitOffsets) {
@@ -36,8 +40,10 @@ public class Transaction {
         }
     }
 
-    public Transaction(long txnNum, String clientName, String datacenterName) {
+    // For creating a preparing transaction
+    public Transaction(TransactionType type, long txnNum, String clientName, String datacenterName) {
         super();
+        this.type = type;
         this.txnNum = txnNum;
         this.clientName = clientName;
         this.datacenterName = datacenterName;
@@ -46,16 +52,41 @@ public class Transaction {
         this.kts = new HashMap<String, Long>();
     }
 
+    // For creating a finished transaction
+    public Transaction(TransactionType type, long txnNum, String clientName, String datacenterName, boolean isCommited) {
+        super();
+        this.type = type;
+        this.txnNum = txnNum;
+        this.clientName = clientName;
+        this.datacenterName = datacenterName;
+        this.writeSet = new HashMap<String, String>();
+        this.readSet = new HashMap<String, Long>();
+        this.kts = new HashMap<String, Long>();
+        this.isCommitted = isCommited;
+    }
+
+    // For creating a finished transaction from preparing transaction
+    public Transaction(Transaction preparingTransaction, boolean isCommited) {
+        super();
+        this.type = TransactionType.FINISHED;
+        this.txnNum = preparingTransaction.txnNum;
+        this.clientName = preparingTransaction.clientName;
+        this.datacenterName = preparingTransaction.datacenterName;
+        this.writeSet = preparingTransaction.writeSet;
+        this.readSet = preparingTransaction.readSet;
+        this.kts = preparingTransaction.kts;
+    }
+
     public Transaction() {
         super();
     }
 
-    public String getDatacenterName() {
-        return datacenterName;
+    public TransactionType getType() {
+        return type;
     }
 
-    public void setDatacenterName(String datacenterName) {
-        this.datacenterName = datacenterName;
+    public void setType(TransactionType type) {
+        this.type = type;
     }
 
     public HashMap<String, String> getWriteSet() {
@@ -74,22 +105,6 @@ public class Transaction {
         this.readSet = readSet;
     }
 
-    public long getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(long timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public HashMap<String, Long> getKts() {
-        return kts;
-    }
-
-    public void setKts(HashMap<String, Long> kts) {
-        this.kts = kts;
-    }
-
     public long getTxnNum() {
         return txnNum;
     }
@@ -106,10 +121,44 @@ public class Transaction {
         this.clientName = clientName;
     }
 
-    @Override
-    public String toString() {
-        return "Transaction [writeSet=" + writeSet + ", readSet=" + readSet + ", timestamp=" + timestamp + ", txnNum="
-                + txnNum + ", clientName=" + clientName + ", datacenterName=" + datacenterName + ", kts=" + kts + "]";
+    public String getDatacenterName() {
+        return datacenterName;
     }
 
+    public void setDatacenterName(String datacenterName) {
+        this.datacenterName = datacenterName;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public HashMap<String, Long> getKts() {
+        return kts;
+    }
+
+    public void setKts(HashMap<String, Long> kts) {
+        this.kts = kts;
+    }
+
+    public boolean isCommitted() {
+        return isCommitted;
+    }
+
+    public void setCommitted(boolean isCommitted) {
+        this.isCommitted = isCommitted;
+    }
+
+    /*
+     * (non-Javadoc)
+     * 
+     * @see java.lang.Comparable#compareTo(java.lang.Object)
+     */
+    public int compareTo(Transaction o) {
+        return timestamp > o.getTimestamp() ? 1 : -1;
+    }
 }

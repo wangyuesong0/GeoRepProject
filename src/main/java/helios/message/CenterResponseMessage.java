@@ -79,7 +79,14 @@ public class CenterResponseMessage extends Message {
 
     @Override
     public String toString() {
-        return "CenterResponseMessage [routingKey=" + routingKey + ", txnNum=" + txnNum + "]";
+        StringBuilder builder = new StringBuilder();
+        builder.append("CenterResponseMessage [type=").append(type).append(", routingKey=").append(routingKey)
+                .append(", txnNum=").append(txnNum).append(", readEntry=").append(readEntry).append("]");
+        return builder.toString();
     }
+
+    
+
+    
 
 }
