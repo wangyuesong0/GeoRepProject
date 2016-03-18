@@ -16,7 +16,6 @@ import helios.datacenter.DataCenter;
  */
 public class LogScanAndPTScanWhenCommitDetectConflictTest {
     public static void main(String[] args) throws Exception {
-        BasicConfigurator.configure();
         String[] dataCenterNames = { "dc0", "dc1" };
         int[] dataCenterLocations = new int[] { 1000, 3000 };
         DataCenter[] dataCenters = new DataCenter[2];

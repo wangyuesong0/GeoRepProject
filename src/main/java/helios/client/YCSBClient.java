@@ -36,8 +36,9 @@ public class YCSBClient extends DB {
         super.init();
         Properties properties = getProperties();
         // String clientName = (String) properties.get("clientName");
-        String clientName = UUID.randomUUID() + "Client";
-        String datacenterName = "dc" + new Random().nextInt(2);
+        String clientName = "Client" + properties.getProperty("id");
+        String datacenterName = "DataCenter" + properties.getProperty("id");
+        
         try {
             this.client = new Client(clientName, datacenterName);
         } catch (IOException e) {
@@ -82,6 +83,8 @@ public class YCSBClient extends DB {
 
         return Status.OK;
     }
+    
+    
 
     /*
      * (non-Javadoc)

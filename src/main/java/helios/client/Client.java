@@ -40,7 +40,7 @@ public class Client implements Runnable {
     private QueueingConsumer consumer;
     private QueueingConsumer.Delivery delivery;
 
-    String datacenterName;
+    String boundedDataCenterName;
 
     public Client(String clientName) throws IOException, TimeoutException {
         super();
@@ -68,7 +68,7 @@ public class Client implements Runnable {
         super();
         BasicConfigurator.configure();
         this.clientName = clientName;
-        this.datacenterName = datacenterName;
+        this.boundedDataCenterName = datacenterName;
         factory = new ConnectionFactory();
         // NEED TO SETUP HOSTS FILE
         factory.setHost(Common.MQ_HOST_NAME);
@@ -122,20 +122,20 @@ public class Client implements Runnable {
      * @throws Exception
      */
     public Long sendBeginMessage(String routingKey) throws Exception {
-        logger.info("Client" + this.clientName + " send read message to datacenter:" + routingKey);
+        logger.info("BEGIN to " + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(this.clientName, routingKey));
         CenterResponseMessage message = getNextDelivery();
         if (message.getType() != CenterMessageType.BEGIN) {
             logger.info(message.getType());
             throw new Exception("Not a begin message response");
         }
-        logger.info("Client " + this.clientName + " get response:" + message);
+        logger.info("Get response: " + message);
         return message.getTxnNum();
     }
 
     // Auto version
     public Long sendBeginMessage() throws Exception {
-        return this.sendBeginMessage(this.datacenterName);
+        return this.sendBeginMessage(this.boundedDataCenterName);
     }
 
     /**
@@ -148,7 +148,7 @@ public class Client implements Runnable {
      * @throws Exception
      */
     public String sendReadMessage(String routingKey, long txnNum, String readKey) throws Exception {
-        logger.info("Client" + this.clientName + " send read message to datacenter:" + routingKey);
+        logger.info("READ to " + routingKey + ", KEY: " + readKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createReadMessage(this.clientName, txnNum, routingKey,
                 readKey));
         CenterResponseMessage message = getNextDelivery();
@@ -156,7 +156,7 @@ public class Client implements Runnable {
             logger.info(message.getType());
             throw new Exception("Not a read message response");
         }
-        logger.info("Client " + this.clientName + " get response:" + message);
+        logger.info("Get response:" + message);
         // Return empty when read is invalid
         if (message.getReadEntry() == null)
             return "";
@@ -164,7 +164,7 @@ public class Client implements Runnable {
     }
 
     public String sendReadMessage(long txnNum, String readKey) throws Exception {
-        return this.sendReadMessage(this.datacenterName, txnNum, readKey);
+        return this.sendReadMessage(this.boundedDataCenterName, txnNum, readKey);
     }
 
     /**
@@ -178,7 +178,7 @@ public class Client implements Runnable {
      */
     public Long sendWriteMessage(String routingKey, long txnNum, String writeKey, String writeValue)
             throws Exception {
-        logger.info("Client send write message to datacenter:" + routingKey);
+        logger.info("WRITE TO:" + routingKey + ", KEY: " + writeKey + ", VALUE: " + writeValue);
         sendMessageToDataCenter(ClientRequestMessageFactory
                 .createWriteMessage(this.clientName, txnNum, routingKey, writeKey, writeValue));
         CenterResponseMessage message = getNextDelivery();
@@ -186,12 +186,12 @@ public class Client implements Runnable {
             logger.info(message.getType());
             throw new Exception("Not a write message response");
         }
-        logger.info("Client " + this.clientName + " get response:" + message);
+        logger.info("Get response:" + message);
         return message.getTxnNum();
     }
 
     public Long sendWriteMessage(long txnNum, String writeKey, String writeValue) throws Exception {
-        return this.sendWriteMessage(this.datacenterName, txnNum, writeKey, writeValue);
+        return this.sendWriteMessage(this.boundedDataCenterName, txnNum, writeKey, writeValue);
     }
 
     /**
@@ -203,14 +203,14 @@ public class Client implements Runnable {
      * @throws Exception
      */
     public boolean sendCommitMessage(String routingKey, long txnNum) throws Exception {
-        logger.info("Client send commit message to datacenter:" + routingKey);
+        logger.info("COMMIT TO" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createCommitMessage(this.clientName, txnNum, routingKey));
         CenterResponseMessage message = getNextDelivery();
         if (message.getType() != CenterMessageType.COMMIT && message.getType() != CenterMessageType.ABORT) {
             logger.info(message.getType());
             throw new Exception("Not a commit or abort message response");
         }
-        logger.info("Client " + this.clientName + " get response:" + message);
+        logger.info("Get response: " + message);
         if (message.getType().equals(CenterMessageType.COMMIT))
             return true;
         else
@@ -218,7 +218,7 @@ public class Client implements Runnable {
     }
 
     public boolean sendCommitMessage(long txnNum) throws Exception {
-        return this.sendCommitMessage(this.datacenterName, txnNum);
+        return this.sendCommitMessage(this.boundedDataCenterName, txnNum);
     }
 
     /**
@@ -236,7 +236,7 @@ public class Client implements Runnable {
     }
 
     public void sendAbortMessage(long txnNum) throws IOException {
-        this.sendAbortMessage(this.datacenterName, txnNum);
+        this.sendAbortMessage(this.boundedDataCenterName, txnNum);
     }
 
     /**

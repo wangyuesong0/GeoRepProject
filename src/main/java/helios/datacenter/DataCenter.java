@@ -56,9 +56,6 @@ public class DataCenter implements Runnable {
     // Queue for log propagation
     private String logPropagationDirectQueueName;
 
-    // Use location to calculated the simulated RTT between datacenters;
-    private int location;
-
     // Consumer for client message and log message
     private QueueingConsumer consumer;
 
@@ -114,15 +111,12 @@ public class DataCenter implements Runnable {
      * @throws Exception
      */
 
-    public DataCenter(String dataCenterName, int location, String[] dataCenterNames,
-            int[] dataCenterLocations)
+    public DataCenter(String dataCenterName, String[] dataCenterNames)
             throws Exception {
         super();
 
         this.dataCenterName = dataCenterName;
-        this.location = location;
         this.dataCenterNames = dataCenterNames;
-        this.dataCenterLocations = dataCenterLocations;
 
         this.totalNumOfDataCenters = dataCenterNames.length;
         this.RTTLatencies = new HashMap<String, Integer>();
@@ -146,12 +140,12 @@ public class DataCenter implements Runnable {
     }
 
     // Generate RTT list based on location setting of data centers
-    public void generateRTTList() {
-        for (int i = 0; i < dataCenterLocations.length; i++) {
-            // this.RTTLatencies[i] = Math.abs(this.location - dataCenterLocations[i]);
-            this.RTTLatencies.put(dataCenterNames[i], Math.abs(this.location - dataCenterLocations[i]));
-        }
-    }
+    // public void generateRTTList() {
+    // for (int i = 0; i < dataCenterLocations.length; i++) {
+    // // this.RTTLatencies[i] = Math.abs(this.location - dataCenterLocations[i]);
+    // this.RTTLatencies.put(dataCenterNames[i], Math.abs(this.location - dataCenterLocations[i]));
+    // }
+    // }
 
     // Temporarily use 0 as all commit offsets
     public void generateCommitOffsets() {
@@ -260,11 +254,13 @@ public class DataCenter implements Runnable {
             e1.printStackTrace();
             System.exit(-1);
         }
+
         // Start Log propagation
-        for (int i = 0; i < dataCenterNames.length; i++) {
-            if (!dataCenterNames[i].equals(this.dataCenterName))
-                // Propgate log to datacenter other than itself
-                new Thread(new LogPropagationThread(this, dataCenterNames[i])).start();
+        if (this.isAutoLogPropagation)
+        {
+            new Thread(new LogPropagationThread(this, this.dataCenterNames, this.RTTLatencies,
+                    this.unsentLogs.toArray(new Log[] {}))).start();
+            this.unsentLogs.clear();
         }
 
         // Receive Log
@@ -463,40 +459,82 @@ public class DataCenter implements Runnable {
 
     }
 
-    private static class LogPropagationThread implements Runnable {
+    private static class LogPropagationWorkerThread implements Runnable {
         private DataCenter fromDataCenter;
         private String toDataCenterName;
+        private int halfRTT;
+        private Log[] logToBeSent;
 
-        public LogPropagationThread(DataCenter fromDataCenter, String toDataCenterName) {
+        public LogPropagationWorkerThread(DataCenter fromDataCenter, String toDataCenterName, int halfRTT,
+                Log[] logToBeSent) {
             super();
             this.fromDataCenter = fromDataCenter;
             this.toDataCenterName = toDataCenterName;
+            this.halfRTT = halfRTT;
+            this.logToBeSent = logToBeSent;
+        }
+
+        /*
+         * (non-Javadoc)
+         * 
+         * @see java.lang.Runnable#run()
+         */
+        public void run() {
+            // TODO Auto-generated method stub
+            try {
+                Thread.sleep(halfRTT);
+                fromDataCenter.sendLogPropagationMessage(toDataCenterName,
+                        new LogPropMessage(fromDataCenter.dataCenterName, logToBeSent, Common.getTimeStamp()
+                        ));
+
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+        }
+
+    }
+
+    private static class LogPropagationThread implements Runnable {
+        private DataCenter fromDataCenter;
+        private int propGapTime;
+        private String[] otherCenters;
+        private HashMap<String, Integer> RTTLatencies;
+        private Log[] logToBeSent;
+
+        public LogPropagationThread(DataCenter fromDataCenter, String[] otherCenters,
+                HashMap<String, Integer> RTTLatencies, Log[] logToBeSent) {
+            super();
+            this.fromDataCenter = fromDataCenter;
+            this.otherCenters = otherCenters;
+            this.RTTLatencies = RTTLatencies;
+            this.logToBeSent = logToBeSent;
         }
 
         public void run() {
             // TODO Auto-generated method stub
             while (true) {
-                if (fromDataCenter.isAutoLogPropagation) {
-                    try {
-                        // Sleep for a specific RTT to simulate the latency
-                        Thread.sleep(fromDataCenter.RTTLatencies.get(toDataCenterName));
-                        // Send log to toDataCenter, message info including sourceDataCenter info and transactions that
-                        // need to be propagated
-                        int logSize = fromDataCenter.unsentLogs.size();
-                        Log[] logToBeSent = new Log[logSize];
-                        fromDataCenter.unsentLogs.toArray(logToBeSent);
-                        fromDataCenter.sendLogPropagationMessage(toDataCenterName,
-                                new LogPropMessage(fromDataCenter.dataCenterName, logToBeSent, Common.getTimeStamp()
-                                ));
-                        fromDataCenter.unsentLogs.clear();
+                try {
+                    // Log prop gap
+                    Thread.sleep(propGapTime);
+                    for (String oneDataCenter : otherCenters) {
+                        // Don't prop to itself
+                        if (oneDataCenter.equals(fromDataCenter.dataCenterName))
+                            continue;
 
-                    } catch (IOException e) {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
-                    } catch (InterruptedException e) {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
+                        LogPropagationWorkerThread workerThread =
+                                new LogPropagationWorkerThread(fromDataCenter, oneDataCenter,
+                                        RTTLatencies.get(oneDataCenter) / 2, logToBeSent);
+                        // Simulate log transmission time, RTT/2
+                        new Thread(workerThread).start();
                     }
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
                 }
             }
         }
@@ -596,17 +634,18 @@ public class DataCenter implements Runnable {
      */
     public void logsScan() throws IOException {
         Iterator<Log> iter = logs.iterator();
+        List<Log> logsToBeRemoved = new ArrayList<Log>();
         while (iter.hasNext()) {
             Log l = iter.next();
-            logger.info(l);
             // If log is processed, don't process it again
-            if (l.isProcessed())
+            if (l.isProcessed()) {
+                logsToBeRemoved.add(l);
                 continue;
+            }
 
             Transaction t = l.getTransaction();
             // Skip local transactions
             if (t.getDatacenterName().equals(this.dataCenterName)) {
-                l.setProcessed(true);
                 continue;
             }
 
@@ -632,6 +671,7 @@ public class DataCenter implements Runnable {
                 }
             }
 
+            // Start to really process log(do replication for committed log and add to EPTPool for preparing log)
             // Log contains a preparing transaction
             if (l.getTransaction().getType().equals(TransactionType.PREPARING)) {
                 EPTPool.add(l.getTransaction());
@@ -647,7 +687,8 @@ public class DataCenter implements Runnable {
                         String key = writeSetIter.next();
                         datastore.writeValue(key, writeSet.get(key));
                     }
-                    logger.info(this.dataCenterName + " replicate the writeset " + writeSet);
+                    logger.info(this.dataCenterName + " replicate the writeset from " + t.getDatacenterName() + ":"
+                            + writeSet);
                 }
 
                 // Remove this transaction from EPTPool whether it's committed or not
@@ -675,6 +716,9 @@ public class DataCenter implements Runnable {
             // // Update rDict
             // rDict.put(t.getDatacenterName(), t.getTimestamp());
         }
+
+        if (logsToBeRemoved.size() != 0)
+            logs.removeAll(logsToBeRemoved);
     }
 
     /**
@@ -731,26 +775,45 @@ public class DataCenter implements Runnable {
             sendCenterResponseMessage(CenterResponseMessageFactory.createCommitResponseMessage(pt.getClientName(),
                     pt.getTxnNum()));
         }
+
         // Remove from PTPool
-        PTPool.removeAll(localTransactionsToBeRemoved);
+        if (localTransactionsToBeRemoved.size() != 0)
+            PTPool.removeAll(localTransactionsToBeRemoved);
+    }
+
+    public HashMap<String, Integer> getRTTLatencies() {
+        return RTTLatencies;
+    }
+
+    public void setRTTLatencies(HashMap<String, Integer> rTTLatencies) {
+        RTTLatencies = rTTLatencies;
+    }
+
+    public HashMap<String, Integer> getCommitOffsets() {
+        return commitOffsets;
+    }
+
+    public void setCommitOffsets(HashMap<String, Integer> commitOffsets) {
+        this.commitOffsets = commitOffsets;
     }
 
     public static void main(String[] args) throws Exception {
-//        BasicConfigurator.configure();
-        String[] dataCenterNames = { "dc0", "dc1" };
-        int[] dataCenterLocations = new int[] { 0, 60 };
-        DataCenter[] dataCenters = new DataCenter[2];
-        for (int i = 0; i < 2; i++) {
-            dataCenters[i] = new DataCenter("dc" + i, i * 60, dataCenterNames, dataCenterLocations);
-        }
-
-        for (int i = 0; i < 2; i++) {
-            dataCenters[i].generateCommitOffsets();
-            dataCenters[i].generateRTTList();
-        }
-
-        for (int i = 0; i < 2; i++) {
-            new Thread(dataCenters[i]).start();
-        }
+        // BasicConfigurator.configure();
+        // String[] dataCenterNames = { "DataCenter0", "DataCenter1" };
+        // int[] dataCenterLocations = new int[] { 0, 60 };
+        // DataCenter[] dataCenters = new DataCenter[2];
+        // for (int i = 0; i < 2; i++) {
+        // dataCenters[i] = new DataCenter("DataCenter" + i, i * 60, dataCenterNames, dataCenterLocations);
+        // }
+        //
+        // for (int i = 0; i < 2; i++) {
+        // dataCenters[i].generateCommitOffsets();
+        // dataCenters[i].generateRTTList();
+        // }
+        //
+        // for (int i = 0; i < 2; i++) {
+        // new Thread(dataCenters[i]).start();
+        // }
+        // }
     }
 }
