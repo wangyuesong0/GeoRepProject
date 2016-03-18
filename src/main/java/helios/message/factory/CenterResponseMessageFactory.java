@@ -22,6 +22,10 @@ public class CenterResponseMessageFactory {
             DatastoreEntry entry) {
         return new CenterResponseMessage(CenterMessageType.READ, routingKey, txnNum, entry);
     }
+    
+    public static CenterResponseMessage createWriteResponseMessage(String routingKey, long txnNum){
+        return new CenterResponseMessage(CenterMessageType.WRITE, routingKey, txnNum);
+    }
 
     public static CenterResponseMessage createAbortReponseMessage(String routingKey, long txnNum) {
         return new CenterResponseMessage(CenterMessageType.ABORT, routingKey, txnNum);

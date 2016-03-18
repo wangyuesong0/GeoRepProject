@@ -10,5 +10,5 @@ package helios.message;
  * @version V1.0
  */
 public enum CenterMessageType {
-    BEGIN, READ, COMMIT, ABORT
+    BEGIN, READ, COMMIT, ABORT, WRITE
 }

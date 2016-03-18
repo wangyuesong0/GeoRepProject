@@ -17,20 +17,22 @@ public class ClientRequestMessageFactory {
         return new ClientRequestMessage(ClientMessageType.BEGIN, clientName, routingKey);
     }
 
-    public static ClientRequestMessage createWriteMessage(String clientName, Integer txnNum, String routingKey, String writeKey,
+    public static ClientRequestMessage createWriteMessage(String clientName, Long txnNum, String routingKey,
+            String writeKey,
             String writeValue) {
         return new ClientRequestMessage(ClientMessageType.WRITE, clientName, routingKey, writeKey, writeValue, txnNum);
     }
 
-    public static ClientRequestMessage createReadMessage(String clientName, Integer txnNum, String routingKey, String readKey) {
+    public static ClientRequestMessage createReadMessage(String clientName, Long txnNum, String routingKey,
+            String readKey) {
         return new ClientRequestMessage(ClientMessageType.READ, clientName, routingKey, readKey, txnNum);
     }
 
-    public static ClientRequestMessage createCommitMessage(String clientName, Integer txnNum, String routingKey) {
+    public static ClientRequestMessage createCommitMessage(String clientName, Long txnNum, String routingKey) {
         return new ClientRequestMessage(ClientMessageType.COMMIT, clientName, routingKey, txnNum);
     }
 
-    public static ClientRequestMessage createAbortMessage(String clientName, Integer txnNum, String routingKey) {
+    public static ClientRequestMessage createAbortMessage(String clientName, Long txnNum, String routingKey) {
         return new ClientRequestMessage(ClientMessageType.ABORT, clientName, routingKey, txnNum);
     }
 

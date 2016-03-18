@@ -39,9 +39,33 @@ public class Client implements Runnable {
     private QueueingConsumer consumer;
     private QueueingConsumer.Delivery delivery;
 
+    String datacenterName;
+
     public Client(String clientName) throws IOException, TimeoutException {
         super();
         this.clientName = clientName;
+        factory = new ConnectionFactory();
+        // NEED TO SETUP HOSTS FILE
+        factory.setHost(Common.MQ_HOST_NAME);
+        connection = factory.newConnection();
+        channel = connection.createChannel();
+        this.datacenterFeedbackMessageReceiverDirectQueueName = Common
+                .getDatacenterFeedbackMessageReceiverDirectQueue(clientName);
+
+        try {
+            this.bindToDatacenterMessageReceiverQueue();
+        } catch (Exception e) {
+            logger.error("Client: " + this.clientName + " bind to client request exchange failed");
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+    }
+
+    public Client(String clientName, String datacenterName) throws IOException, TimeoutException {
+        super();
+        this.clientName = clientName;
+        this.datacenterName = datacenterName;
         factory = new ConnectionFactory();
         // NEED TO SETUP HOSTS FILE
         factory.setHost(Common.MQ_HOST_NAME);
@@ -105,6 +129,11 @@ public class Client implements Runnable {
         return message.getTxnNum();
     }
 
+    // Auto version
+    public Long sendBeginMessage() throws Exception {
+        return this.sendBeginMessage(this.datacenterName);
+    }
+
     /**
      * 
      * Description: Send read message
@@ -114,7 +143,7 @@ public class Client implements Runnable {
      * @param readKey
      * @throws Exception
      */
-    public String sendReadMessage(String routingKey, int txnNum, String readKey) throws Exception {
+    public String sendReadMessage(String routingKey, long txnNum, String readKey) throws Exception {
         logger.info("Client" + this.clientName + " send read message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createReadMessage(this.clientName, txnNum, routingKey,
                 readKey));
@@ -126,31 +155,45 @@ public class Client implements Runnable {
         return message.getReadEntry().getValue();
     }
 
+    public String sendReadMessage(long txnNum, String readKey) throws Exception {
+        return this.sendReadMessage(this.datacenterName, txnNum, readKey);
+    }
+
     /**
-     * Description: Send write message
+     * Description: Send write message, Server will just respond a txnNum indicating that it received the message
      * 
      * @param routingKey
      * @param txnNum
      * @param writeKey
      * @param writeValue
-     * @throws IOException
-     *             void
+     * @throws Exception
      */
-    public void sendWriteMessage(String routingKey, int txnNum, String writeKey, String writeValue) throws IOException {
+    public Long sendWriteMessage(String routingKey, long txnNum, String writeKey, String writeValue)
+            throws Exception {
         logger.info("Client send write message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory
                 .createWriteMessage(this.clientName, txnNum, routingKey, writeKey, writeValue));
+        CenterResponseMessage message = getNextDelivery();
+        if (message.getType() != CenterMessageType.READ) {
+            throw new Exception("Not a write message response");
+        }
+        logger.info("Client " + this.clientName + " get response:" + message);
+        return message.getTxnNum();
+    }
+
+    public Long sendWriteMessage(long txnNum, String writeKey, String writeValue) throws Exception {
+        return this.sendWriteMessage(this.datacenterName, txnNum, writeKey, writeValue);
     }
 
     /**
      * 
-     * Description: Send commit message
+     * Description: Send commit message, return true for commit successfully, false for commit failed
      * 
      * @param routingKey
      * @param txnNum
      * @throws Exception
      */
-    public void sendCommitMessage(String routingKey, int txnNum) throws Exception {
+    public boolean sendCommitMessage(String routingKey, long txnNum) throws Exception {
         logger.info("Client send commit message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createCommitMessage(this.clientName, txnNum, routingKey));
         CenterResponseMessage message = getNextDelivery();
@@ -158,7 +201,14 @@ public class Client implements Runnable {
             throw new Exception("Not a commit or abort message response");
         }
         logger.info("Client " + this.clientName + " get response:" + message);
+        if (message.getType().equals(CenterMessageType.COMMIT))
+            return true;
+        else
+            return false;
+    }
 
+    public boolean sendCommitMessage(long txnNum) throws Exception {
+        return this.sendCommitMessage(this.datacenterName, txnNum);
     }
 
     /**
@@ -170,9 +220,13 @@ public class Client implements Runnable {
      * @throws IOException
      *             void
      */
-    public void sendAbortMessage(String routingKey, int txnNum) throws IOException {
+    public void sendAbortMessage(String routingKey, long txnNum) throws IOException {
         logger.info("Client send abort message to datacenter:" + routingKey);
         sendMessageToDataCenter(ClientRequestMessageFactory.createAbortMessage(this.clientName, txnNum, routingKey));
+    }
+
+    public void sendAbortMessage(long txnNum) throws IOException {
+        this.sendAbortMessage(this.datacenterName, txnNum);
     }
 
     /**
@@ -256,7 +310,7 @@ public class Client implements Runnable {
     public static void main(String[] args) throws IOException, TimeoutException {
         Client a = new Client("shit");
         new Thread(a).start();
-//        a.sendBeginMessage("dc1");
+        // a.sendBeginMessage("dc1");
 
     }
 

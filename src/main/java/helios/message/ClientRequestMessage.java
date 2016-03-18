@@ -51,7 +51,7 @@ public class ClientRequestMessage extends Message {
      * @param readKey
      * @param txnNum
      */
-    public ClientRequestMessage(ClientMessageType type, String clientName,String routingKey, String readKey, Integer txnNum) {
+    public ClientRequestMessage(ClientMessageType type, String clientName,String routingKey, String readKey, long txnNum) {
         super();
         this.type = type;
         this.routingKey = routingKey;
@@ -80,7 +80,7 @@ public class ClientRequestMessage extends Message {
      * @param routingKey
      * @param txnNum
      */
-    public ClientRequestMessage(ClientMessageType type,String clientName, String routingKey, Integer txnNum) {
+    public ClientRequestMessage(ClientMessageType type,String clientName, String routingKey, long txnNum) {
         super();
         this.type = type;
         this.routingKey = routingKey;

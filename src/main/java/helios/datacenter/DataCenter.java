@@ -406,8 +406,9 @@ public class DataCenter implements Runnable {
      * 
      * @param request
      *            void
+     * @throws IOException 
      */
-    private void handleWriteMessage(ClientRequestMessage request) {
+    private void handleWriteMessage(ClientRequestMessage request) throws IOException {
         long txnNum = request.getTxnNum();
         String clientName = request.getClientName();
 
@@ -415,8 +416,11 @@ public class DataCenter implements Runnable {
         datastore.writeValue(request.getWriteKey(), request.getWriteValue());
 
         Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
-        System.out.println(t);
         t.getWriteSet().put(request.getWriteKey(), request.getWriteValue());
+        CenterResponseMessage writeResponse = CenterResponseMessageFactory.createWriteResponseMessage(clientName,
+                txnNum);
+        
+        sendCenterResponseMessage(writeResponse);
     }
 
     /**
