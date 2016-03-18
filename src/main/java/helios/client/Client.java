@@ -44,7 +44,6 @@ public class Client implements Runnable {
 
     public Client(String clientName) throws IOException, TimeoutException {
         super();
-        BasicConfigurator.configure();
         this.clientName = clientName;
         factory = new ConnectionFactory();
         // NEED TO SETUP HOSTS FILE
@@ -66,7 +65,6 @@ public class Client implements Runnable {
 
     public Client(String clientName, String datacenterName) throws IOException, TimeoutException {
         super();
-        BasicConfigurator.configure();
         this.clientName = clientName;
         this.boundedDataCenterName = datacenterName;
         factory = new ConnectionFactory();

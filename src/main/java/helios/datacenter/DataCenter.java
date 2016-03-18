@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.PrimitiveIterator.OfDouble;
 
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
@@ -100,6 +101,8 @@ public class DataCenter implements Runnable {
 
     // Transaction count generator
     public long txnNumGenerator;
+
+    private static final int LOG_PROP_TIME_GAP = 50;
 
     private static Logger logger = Logger.getLogger(DataCenter.class);
 
@@ -258,8 +261,18 @@ public class DataCenter implements Runnable {
         // Start Log propagation
         if (this.isAutoLogPropagation)
         {
-            new Thread(new LogPropagationThread(this, this.dataCenterNames, this.RTTLatencies,
-                    this.unsentLogs.toArray(new Log[] {}))).start();
+            TreeSet<Log> logsToBeSent = new TreeSet<Log>();
+            logsToBeSent.addAll(unsentLogs);
+            Log[] arrayOfLogsToBeSent = new Log[logsToBeSent.size()];
+            logsToBeSent.toArray(arrayOfLogsToBeSent);
+            // Assume every 10 ms there is a log propagation
+            for (String otherDataCenter : this.dataCenterNames) {
+                if (!this.dataCenterName.equals(otherDataCenter)) {
+                    new Thread(new LogPropagationThread(RTTLatencies.get(otherDataCenter) / 2 + LOG_PROP_TIME_GAP,
+                            this,
+                            otherDataCenter, arrayOfLogsToBeSent)).start();
+                }
+            }
             this.unsentLogs.clear();
         }
 
@@ -300,10 +313,15 @@ public class DataCenter implements Runnable {
                     }
                     else if (wrapper.getmessageclass() == LogPropMessage.class) {
                         LogPropMessage logPropMessage = (LogPropMessage) wrapper.getDeSerializedInnerMessage();
-                        // logger.info("Datacenter:" + this.dataCenterName + " get log prop from Datacenter:"
-                        // + logPropMessage.getSourceDataCenterName());
+                         
                         Log[] deliveredLogs = logPropMessage.getLogs();
+                        if(deliveredLogs.length != 0){
+                            logger.info("Datacenter:" + this.dataCenterName + " get log prop from Datacenter:"
+                                    + logPropMessage.getSourceDataCenterName());
+                        }
                         for (Log l : deliveredLogs) {
+                            if (l == null)
+                                continue;
                             this.logs.add(l);
                             logger.info(l);
                         }
@@ -459,60 +477,23 @@ public class DataCenter implements Runnable {
 
     }
 
-    private static class LogPropagationWorkerThread implements Runnable {
-        private DataCenter fromDataCenter;
-        private String toDataCenterName;
-        private int halfRTT;
-        private Log[] logToBeSent;
-
-        public LogPropagationWorkerThread(DataCenter fromDataCenter, String toDataCenterName, int halfRTT,
-                Log[] logToBeSent) {
-            super();
-            this.fromDataCenter = fromDataCenter;
-            this.toDataCenterName = toDataCenterName;
-            this.halfRTT = halfRTT;
-            this.logToBeSent = logToBeSent;
-        }
-
-        /*
-         * (non-Javadoc)
-         * 
-         * @see java.lang.Runnable#run()
-         */
-        public void run() {
-            // TODO Auto-generated method stub
-            try {
-                Thread.sleep(halfRTT);
-                fromDataCenter.sendLogPropagationMessage(toDataCenterName,
-                        new LogPropMessage(fromDataCenter.dataCenterName, logToBeSent, Common.getTimeStamp()
-                        ));
-
-            } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-
-        }
-
-    }
-
     private static class LogPropagationThread implements Runnable {
+        private int sleepTime;
         private DataCenter fromDataCenter;
-        private int propGapTime;
-        private String[] otherCenters;
-        private HashMap<String, Integer> RTTLatencies;
-        private Log[] logToBeSent;
+        private String toDataCenter;
+        private Log[] logsToBeSent;
 
-        public LogPropagationThread(DataCenter fromDataCenter, String[] otherCenters,
-                HashMap<String, Integer> RTTLatencies, Log[] logToBeSent) {
-            super();
-            this.fromDataCenter = fromDataCenter;
-            this.otherCenters = otherCenters;
-            this.RTTLatencies = RTTLatencies;
-            this.logToBeSent = logToBeSent;
+        /**
+         * @param i
+         * @param dataCenter
+         * @param otherDataCenter
+         * @param logsToBeSent
+         */
+        public LogPropagationThread(int i, DataCenter dataCenter, String otherDataCenter, Log[] logsToBeSent) {
+            this.sleepTime = i;
+            this.fromDataCenter = dataCenter;
+            this.toDataCenter = otherDataCenter;
+            this.logsToBeSent = logsToBeSent;
         }
 
         public void run() {
@@ -520,19 +501,14 @@ public class DataCenter implements Runnable {
             while (true) {
                 try {
                     // Log prop gap
-                    Thread.sleep(propGapTime);
-                    for (String oneDataCenter : otherCenters) {
-                        // Don't prop to itself
-                        if (oneDataCenter.equals(fromDataCenter.dataCenterName))
-                            continue;
-
-                        LogPropagationWorkerThread workerThread =
-                                new LogPropagationWorkerThread(fromDataCenter, oneDataCenter,
-                                        RTTLatencies.get(oneDataCenter) / 2, logToBeSent);
-                        // Simulate log transmission time, RTT/2
-                        new Thread(workerThread).start();
-                    }
+                    Thread.sleep(sleepTime);
+                    fromDataCenter.sendLogPropagationMessage(toDataCenter,
+                            new LogPropMessage(fromDataCenter.dataCenterName, logsToBeSent, Common.getTimeStamp()
+                            ));
                 } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (IOException e) {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
                 }
@@ -736,8 +712,10 @@ public class DataCenter implements Runnable {
             Transaction pt = iterator.next();
             boolean isCommitable = true;
             for (String otherDatacenter : dataCenterNames) {
+                // Not itself
                 if (this.dataCenterName.equals(otherDatacenter))
                     continue;
+
                 if (rDict.get(otherDatacenter) == null
                         || rDict.get(otherDatacenter) < pt.getKts().get(otherDatacenter)) {
                     isCommitable = false;
