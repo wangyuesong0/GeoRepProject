@@ -3,13 +3,14 @@ package helios.client;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.Vector;
 import java.util.concurrent.TimeoutException;
 
 import org.codehaus.jettison.json.JSONObject;
 
-import com.google.gson.JsonObject;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
@@ -34,8 +35,9 @@ public class YCSBClient extends DB {
         // TODO Auto-generated method stub
         super.init();
         Properties properties = getProperties();
-        String clientName = (String) properties.get("clientName");
-        String datacenterName = (String) properties.get("datacenterName");
+        // String clientName = (String) properties.get("clientName");
+        String clientName = UUID.randomUUID() + "Client";
+        String datacenterName = "dc" + new Random().nextInt(2);
         try {
             this.client = new Client(clientName, datacenterName);
         } catch (IOException e) {
@@ -65,6 +67,7 @@ public class YCSBClient extends DB {
      */
     @Override
     public Status insert(String arg0, String arg1, HashMap<String, ByteIterator> arg2) {
+        System.out.println("Insert");
         Long txnNum;
         try {
             txnNum = client.sendBeginMessage();
@@ -87,6 +90,7 @@ public class YCSBClient extends DB {
      */
     @Override
     public Status read(String arg0, String arg1, Set<String> arg2, HashMap<String, ByteIterator> arg3) {
+        System.out.println("Read");
         Long txnNum;
         try {
             txnNum = client.sendBeginMessage();
@@ -113,6 +117,7 @@ public class YCSBClient extends DB {
     @Override
     public Status scan(String table, String key, int recordCount, Set<String> fields,
             Vector<HashMap<String, ByteIterator>> result) {
+        System.out.println("Scan");
         Long txnNum;
         try {
             txnNum = client.sendBeginMessage();
@@ -141,6 +146,7 @@ public class YCSBClient extends DB {
      */
     @Override
     public Status update(String arg0, String arg1, HashMap<String, ByteIterator> arg2) {
+        System.out.println("Update");
         Long txnNum;
         try {
             txnNum = client.sendBeginMessage();

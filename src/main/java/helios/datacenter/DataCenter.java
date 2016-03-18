@@ -23,6 +23,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 
 import com.rabbitmq.client.Channel;
@@ -388,16 +389,27 @@ public class DataCenter implements Runnable {
         // Do the read
         DatastoreEntry entry = datastore.readValue(request.getReadKey());
 
-        // Add key/version to read set
-        Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
-        t.getReadSet().put(request.getReadKey(), entry.getVersion());
+        // If empty, don't put it into readset
+        if (entry == null) {
+            CenterResponseMessage readResponseMessage = CenterResponseMessageFactory.createReadResponseMessage(
+                    clientName,
+                    txnNum,
+                    null);
+            sendCenterResponseMessage(readResponseMessage);
+        }
+        else {
+            // Add key/version to read set
+            Transaction t = uncommitedTxnDetails.get(request.getTxnNum());
+            t.getReadSet().put(request.getReadKey(), entry.getVersion());
 
-        // Response user with read version and value
-        CenterResponseMessage readResponseMessage = CenterResponseMessageFactory.createReadResponseMessage(
-                clientName,
-                txnNum,
-                entry);
-        sendCenterResponseMessage(readResponseMessage);
+            // Response user with read version and value
+            CenterResponseMessage readResponseMessage = CenterResponseMessageFactory.createReadResponseMessage(
+                    clientName,
+                    txnNum,
+                    entry);
+            sendCenterResponseMessage(readResponseMessage);
+
+        }
 
     }
 
@@ -406,7 +418,7 @@ public class DataCenter implements Runnable {
      * 
      * @param request
      *            void
-     * @throws IOException 
+     * @throws IOException
      */
     private void handleWriteMessage(ClientRequestMessage request) throws IOException {
         long txnNum = request.getTxnNum();
@@ -419,7 +431,7 @@ public class DataCenter implements Runnable {
         t.getWriteSet().put(request.getWriteKey(), request.getWriteValue());
         CenterResponseMessage writeResponse = CenterResponseMessageFactory.createWriteResponseMessage(clientName,
                 txnNum);
-        
+
         sendCenterResponseMessage(writeResponse);
     }
 
@@ -650,8 +662,11 @@ public class DataCenter implements Runnable {
                 }
                 if (target == null) {
                     logger.info("Error while removing preparing transaction from EPTPool");
+
                 }
-                EPTPool.remove(target);
+                else {
+                    EPTPool.remove(target);
+                }
             }
 
             // Set the log as processed
@@ -686,6 +701,7 @@ public class DataCenter implements Runnable {
                 }
             }
             if (!isCommitable) {
+                logger.info(pt.getDatacenterName() + " not able to commit local transaction" + pt.getTxnNum());
                 continue;
             }
 
@@ -720,19 +736,21 @@ public class DataCenter implements Runnable {
     }
 
     public static void main(String[] args) throws Exception {
-        ArrayList<DataCenter> dataCenterList = new ArrayList<DataCenter>();
-        String[] dataCenterNames = { "dc1", "dc2" };
-        int[] dataCenterLocations = { 10000, 15000 };
-        for (int i = 0; i < dataCenterNames.length; i++) {
-            dataCenterList.add(new DataCenter(dataCenterNames[i], dataCenterLocations[i], dataCenterNames,
-                    dataCenterLocations));
+//        BasicConfigurator.configure();
+        String[] dataCenterNames = { "dc0", "dc1" };
+        int[] dataCenterLocations = new int[] { 0, 60 };
+        DataCenter[] dataCenters = new DataCenter[2];
+        for (int i = 0; i < 2; i++) {
+            dataCenters[i] = new DataCenter("dc" + i, i * 60, dataCenterNames, dataCenterLocations);
         }
-        for (int i = 0; i < dataCenterNames.length; i++) {
-            dataCenterList.get(i).generateRTTList();
-            dataCenterList.get(i).generateCommitOffsets();
+
+        for (int i = 0; i < 2; i++) {
+            dataCenters[i].generateCommitOffsets();
+            dataCenters[i].generateRTTList();
         }
-        for (int i = 0; i < dataCenterList.size(); i++) {
-            new Thread(dataCenterList.get(i)).start();
+
+        for (int i = 0; i < 2; i++) {
+            new Thread(dataCenters[i]).start();
         }
     }
 }

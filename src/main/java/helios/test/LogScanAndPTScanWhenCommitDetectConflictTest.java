@@ -1,5 +1,7 @@
 package helios.test;
 
+import org.apache.log4j.BasicConfigurator;
+
 import helios.client.Client;
 import helios.datacenter.DataCenter;
 
@@ -14,6 +16,7 @@ import helios.datacenter.DataCenter;
  */
 public class LogScanAndPTScanWhenCommitDetectConflictTest {
     public static void main(String[] args) throws Exception {
+        BasicConfigurator.configure();
         String[] dataCenterNames = { "dc0", "dc1" };
         int[] dataCenterLocations = new int[] { 1000, 3000 };
         DataCenter[] dataCenters = new DataCenter[2];
@@ -36,13 +39,13 @@ public class LogScanAndPTScanWhenCommitDetectConflictTest {
         Thread.sleep(1000);
         client.sendWriteMessage("dc1", 0, "s", "b");
         Thread.sleep(1000);
-        
+
         client.sendBeginMessage("dc0");
         Thread.sleep(1000);
         client.sendWriteMessage("dc0", 0, "s", "t");
         Thread.sleep(1000);
         client.sendCommitMessage("dc0", 0);
-        
+
         client.sendReadMessage("dc1", 0, "s");
         Thread.sleep(1000);
         client.sendCommitMessage("dc1", 0);

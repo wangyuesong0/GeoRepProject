@@ -10,6 +10,7 @@ import helios.misc.Common;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 
 import com.rabbitmq.client.Channel;
@@ -43,6 +44,7 @@ public class Client implements Runnable {
 
     public Client(String clientName) throws IOException, TimeoutException {
         super();
+        BasicConfigurator.configure();
         this.clientName = clientName;
         factory = new ConnectionFactory();
         // NEED TO SETUP HOSTS FILE
@@ -64,6 +66,7 @@ public class Client implements Runnable {
 
     public Client(String clientName, String datacenterName) throws IOException, TimeoutException {
         super();
+        BasicConfigurator.configure();
         this.clientName = clientName;
         this.datacenterName = datacenterName;
         factory = new ConnectionFactory();
@@ -123,6 +126,7 @@ public class Client implements Runnable {
         sendMessageToDataCenter(ClientRequestMessageFactory.createBeginMessage(this.clientName, routingKey));
         CenterResponseMessage message = getNextDelivery();
         if (message.getType() != CenterMessageType.BEGIN) {
+            logger.info(message.getType());
             throw new Exception("Not a begin message response");
         }
         logger.info("Client " + this.clientName + " get response:" + message);
@@ -149,9 +153,13 @@ public class Client implements Runnable {
                 readKey));
         CenterResponseMessage message = getNextDelivery();
         if (message.getType() != CenterMessageType.READ) {
+            logger.info(message.getType());
             throw new Exception("Not a read message response");
         }
         logger.info("Client " + this.clientName + " get response:" + message);
+        // Return empty when read is invalid
+        if (message.getReadEntry() == null)
+            return "";
         return message.getReadEntry().getValue();
     }
 
@@ -174,7 +182,8 @@ public class Client implements Runnable {
         sendMessageToDataCenter(ClientRequestMessageFactory
                 .createWriteMessage(this.clientName, txnNum, routingKey, writeKey, writeValue));
         CenterResponseMessage message = getNextDelivery();
-        if (message.getType() != CenterMessageType.READ) {
+        if (message.getType() != CenterMessageType.WRITE) {
+            logger.info(message.getType());
             throw new Exception("Not a write message response");
         }
         logger.info("Client " + this.clientName + " get response:" + message);
@@ -198,6 +207,7 @@ public class Client implements Runnable {
         sendMessageToDataCenter(ClientRequestMessageFactory.createCommitMessage(this.clientName, txnNum, routingKey));
         CenterResponseMessage message = getNextDelivery();
         if (message.getType() != CenterMessageType.COMMIT && message.getType() != CenterMessageType.ABORT) {
+            logger.info(message.getType());
             throw new Exception("Not a commit or abort message response");
         }
         logger.info("Client " + this.clientName + " get response:" + message);
