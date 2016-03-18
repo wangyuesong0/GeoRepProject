@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeSet;
@@ -80,7 +81,7 @@ public class DataCenter implements Runnable {
     // set to 0
     private HashMap<String, Integer> commitOffsets;
 
-    // Local transaction pool
+    // Local preparing transaction pool
     private TreeSet<Transaction> PTPool;
 
     // External transaction pool
@@ -302,8 +303,8 @@ public class DataCenter implements Runnable {
                     }
                     else if (wrapper.getmessageclass() == LogPropMessage.class) {
                         LogPropMessage logPropMessage = (LogPropMessage) wrapper.getDeSerializedInnerMessage();
-//                        logger.info("Datacenter:" + this.dataCenterName + " get log prop from Datacenter:"
-//                                + logPropMessage.getSourceDataCenterName());
+                        // logger.info("Datacenter:" + this.dataCenterName + " get log prop from Datacenter:"
+                        // + logPropMessage.getSourceDataCenterName());
                         Log[] deliveredLogs = logPropMessage.getLogs();
                         for (Log l : deliveredLogs) {
                             this.logs.add(l);
@@ -312,7 +313,7 @@ public class DataCenter implements Runnable {
                         // Update rDict
                         this.rDict.put(logPropMessage.getSourceDataCenterName(), logPropMessage.getLogPropTimestamp());
 
-                        logger.info(dataCenterName + " do pt pool scan");
+                        // logger.info(dataCenterName + " do pt pool scan");
                         this.PTPoolScan();
                         if (deliveredLogs.length > 0) {
                             logger.info(dataCenterName + " do log scan, get " + deliveredLogs.length + " logs");
@@ -357,7 +358,7 @@ public class DataCenter implements Runnable {
         // If conflict or being overriten just abort
         if (isConflict(txn) || isOverriten(txn)) {
             uncommitedTxnDetails.remove(txnNum);
-            CenterResponseMessageFactory.createAbortReponseMessage(clientName, txnNum);
+            sendCenterResponseMessage(CenterResponseMessageFactory.createAbortReponseMessage(clientName, txnNum));
             return;
         }
         txn.setTimestamp(Common.getTimeStamp());
@@ -565,9 +566,9 @@ public class DataCenter implements Runnable {
         Set<String> localOrExtTxnWriteSet = localOrExtTxn.getWriteSet().keySet();
         for (String s : localOrExtTxnWriteSet) {
             if (txnReadSet.contains(s) || txnWriteSet.contains(s))
-                return false;
+                return true;
         }
-        return true;
+        return false;
     }
 
     /**
@@ -581,7 +582,7 @@ public class DataCenter implements Runnable {
         Iterator<Log> iter = logs.iterator();
         while (iter.hasNext()) {
             Log l = iter.next();
-            logger.info("Log timestamp:" + l.getTransaction().getTimestamp());
+            logger.info(l);
             // If log is processed, don't process it again
             if (l.isProcessed())
                 continue;
@@ -626,10 +627,11 @@ public class DataCenter implements Runnable {
                 if (t.isCommitted()) {
                     HashMap<String, String> writeSet = t.getWriteSet();
                     Iterator<String> writeSetIter = writeSet.keySet().iterator();
-                    while (iter.hasNext()) {
+                    while (writeSetIter.hasNext()) {
                         String key = writeSetIter.next();
                         datastore.writeValue(key, writeSet.get(key));
                     }
+                    logger.info(this.dataCenterName + " replicate the writeset " + writeSet);
                 }
 
                 // Remove this transaction from EPTPool whether it's committed or not
@@ -658,13 +660,15 @@ public class DataCenter implements Runnable {
 
     /**
      * 
-     * Description: PTPool scan for local commit
+     * Description: PTPool scan for local commit(Algo3)
      * void
      * 
      * @throws IOException
      */
     public void PTPoolScan() throws IOException {
+        List<Transaction> localTransactionsToBeRemoved = new ArrayList<Transaction>();
         Iterator<Transaction> iterator = PTPool.iterator();
+
         while (iterator.hasNext()) {
             Transaction pt = iterator.next();
             boolean isCommitable = true;
@@ -689,19 +693,26 @@ public class DataCenter implements Runnable {
                 String key = writeSetIterator.next();
                 // FIXME datastore operations
                 datastore.writeValue(key, writeSet.get(key));
-                // Send commit message to client
-                sendCenterResponseMessage(CenterResponseMessageFactory.createCommitResponseMessage(pt.getClientName(),
-                        pt.getTxnNum()));
-
-                // Create a finished log
-                Transaction finishedTransaction = TransactionFactory.createFinishedTransactionFromPreparingTransaction(
-                        pt, true);
-                finishedTransaction.setTimestamp(Common.getTimeStamp());
-                Log l = new Log(finishedTransaction);
-                logs.add(l);
-                unsentLogs.add(l);
             }
+
+            // Create a finished log
+            Transaction finishedTransaction = TransactionFactory.createFinishedTransactionFromPreparingTransaction(
+                    pt, true);
+            finishedTransaction.setTimestamp(Common.getTimeStamp());
+            finishedTransaction.setCommitted(true);
+            Log l = new Log(finishedTransaction);
+            logs.add(l);
+            unsentLogs.add(l);
+
+            // Remove this preparing transaction from PTPool
+            localTransactionsToBeRemoved.add(pt);
+
+            // Send commit message to client
+            sendCenterResponseMessage(CenterResponseMessageFactory.createCommitResponseMessage(pt.getClientName(),
+                    pt.getTxnNum()));
         }
+        // Remove from PTPool
+        PTPool.removeAll(localTransactionsToBeRemoved);
     }
 
     public static void main(String[] args) throws Exception {

@@ -12,7 +12,7 @@ import helios.datacenter.DataCenter;
  * @date Mar 17, 2016 12:45:58 AM
  * @version V1.0
  */
-public class LogScanAndPTScanTest {
+public class LogScanAndPTScanWhenCommitDetectOverriteenTest {
     public static void main(String[] args) throws Exception {
         String[] dataCenterNames = { "dc0", "dc1" };
         int[] dataCenterLocations = new int[] { 1000, 3000 };
@@ -36,16 +36,21 @@ public class LogScanAndPTScanTest {
         Thread.sleep(1000);
         client.sendWriteMessage("dc1", 0, "s", "b");
         Thread.sleep(1000);
-        client.sendReadMessage("dc1", 0, "s");
-        Thread.sleep(1000);
         client.sendCommitMessage("dc1", 0);
 
-        client.sendBeginMessage("dc0");
+        // Do a read
+        client.sendBeginMessage("dc1");
+        client.sendReadMessage("dc1", 1, "s");
+
+        // Overrite
+        client.sendBeginMessage("dc1");
         Thread.sleep(1000);
-        client.sendReadMessage("dc0", 0, "s");
+        client.sendWriteMessage("dc1", 2, "s", "t");
         Thread.sleep(1000);
-        client.sendCommitMessage("dc0", 0);
-        
+        client.sendCommitMessage("dc1", 2);
+        Thread.sleep(1000);
+
+        client.sendCommitMessage("dc1", 1);
 
         // client.sendWriteMessage("dc1", 0, "shit", "fuck");
         // Thread.sleep(1000);
