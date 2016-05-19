@@ -1,6 +1,2 @@
 # GeoRepProjectaser
-
-Test
-
-
-12414
+This is the project for UCSB cs273 Database system    
